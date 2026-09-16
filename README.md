@@ -6,6 +6,38 @@ Site: https://d1nhri0xudbp4k.cloudfront.net/
 
 튜터 1명과 튜티 최대 5명이 쓰는 자료구조 튜터링 웹사이트입니다. React·TypeScript 화면, Cognito Google 로그인, API Gateway·Lambda, DynamoDB, 비공개 S3 자료 저장소, CloudFront를 AWS CDK로 배포합니다.
 
+## 우리 서비스의 구조
+
+```mermaid
+flowchart LR
+    U[튜터·튜티 브라우저] --> CF[CloudFront]
+    CF --> WEB[S3 · 웹 화면]
+    U --> C[Cognito · 로그인]
+    C --> G[Google OAuth]
+    CF --> API[API Gateway · 로그인 검증]
+    API --> L[Lambda · 권한과 서비스 기능]
+    L --> DB[DynamoDB · 일정·공지·응답]
+    L --> FILE[S3 비공개 버킷 · 교수님 PDF]
+    L --> SM[Secrets Manager · 비밀값]
+    L --> AI[Bedrock Claude · 퀴즈 초안]
+    L --> TG[Telegram · 튜터 알림]
+    GH[GitHub Actions] --> CDK[AWS CDK 배포]
+    CDK --> CF
+    CDK --> API
+```
+
+화면은 React·TypeScript로 만들고 S3에 정적 파일로 올립니다. CloudFront가 화면을 전달하고 API 요청을 API Gateway로 보냅니다. Cognito가 Google 로그인 토큰을 발급하며, API Gateway와 Lambda가 로그인과 튜터·튜티 권한을 검사합니다. 일정과 게시글은 DynamoDB에, 교수님 PDF는 별도의 비공개 S3 버킷에 저장합니다. PDF는 권한 검사 후 짧게 유효한 다운로드 링크로 제공합니다. AWS CDK가 이 자원들을 코드로 관리합니다.
+
+### Harbor·쿠버네티스·파드는 언제 쓰나?
+
+| 도구 | 주로 쓰는 경우 | 이 사이트 |
+| --- | --- | --- |
+| [Harbor](https://goharbor.io/) | 직접 만든 컨테이너 이미지를 보관하고 접근 권한·스캔을 관리할 때 | 배포할 컨테이너 이미지가 없어 사용하지 않습니다. |
+| [쿠버네티스](https://kubernetes.io/docs/concepts/) | 여러 컨테이너 서비스를 계속 실행하면서 배포·확장·복구를 직접 제어할 때 | 서버 기능을 AWS Lambda로 실행하므로 클러스터를 운영하지 않습니다. |
+| [파드](https://kubernetes.io/docs/concepts/workloads/pods/) | 쿠버네티스에서 컨테이너를 실행할 때 쓰는 가장 작은 배포 단위 | 쿠버네티스가 없으므로 파드도 만들지 않습니다. |
+
+이 서비스는 웹 정적 파일과 요청이 들어올 때 실행되는 Lambda 함수로 충분합니다. 나중에 상시 실행 서버나 여러 컨테이너 서비스가 필요해지면 그때 컨테이너 플랫폼을 검토하면 됩니다.
+
 ## 현재 잠정 일정
 
 첫 미팅은 **2026년 9월 17일(목) 18:30, Zoom**입니다. 소개와 운영 안내를 위한 모임이며, 링크는 튜터가 받는 대로 **Zoom 모임** 탭에 등록합니다. 이 안내는 탐험 지도 게시판의 첫 공지에도 준비했습니다.
