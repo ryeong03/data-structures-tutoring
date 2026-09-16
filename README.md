@@ -22,10 +22,11 @@ flowchart TB
 
 화면은 React·TypeScript로 만들고 S3에 정적 파일로 올립니다. CloudFront가 화면을 전달하고 API 요청을 API Gateway로 보냅니다. Cognito가 Google 로그인 토큰을 발급하며, API Gateway와 Lambda가 로그인과 튜터·튜티 권한을 검사합니다. 일정과 게시글은 DynamoDB에, 교수님 PDF는 별도의 비공개 S3 버킷에 저장합니다. PDF는 권한 검사 후 짧게 유효한 다운로드 링크로 제공합니다. AWS CDK가 이 자원들을 코드로 관리합니다.
 
-### Harbor·쿠버네티스·파드는 언제 쓰나?
+### EC2·Harbor·쿠버네티스·파드는 언제 쓰나?
 
 | 도구 | 주로 쓰는 경우 | 이 사이트 |
 | --- | --- | --- |
+| [EC2](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/concepts.html) | 운영체제와 서버 프로그램을 직접 설치·관리하는 가상 서버가 필요할 때 | 웹은 S3·CloudFront, 서버 기능은 Lambda에서 실행하므로 EC2 인스턴스를 만들지 않습니다. |
 | [Harbor](https://goharbor.io/) | 직접 만든 컨테이너 이미지를 보관하고 접근 권한·스캔을 관리할 때 | 배포할 컨테이너 이미지가 없어 사용하지 않습니다. |
 | [쿠버네티스](https://kubernetes.io/docs/concepts/) | 여러 컨테이너 서비스를 계속 실행하면서 배포·확장·복구를 직접 제어할 때 | 서버 기능을 AWS Lambda로 실행하므로 클러스터를 운영하지 않습니다. |
 | [파드](https://kubernetes.io/docs/concepts/workloads/pods/) | 쿠버네티스에서 컨테이너를 실행할 때 쓰는 가장 작은 배포 단위 | 쿠버네티스가 없으므로 파드도 만들지 않습니다. |
