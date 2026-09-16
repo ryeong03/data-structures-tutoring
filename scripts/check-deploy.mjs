@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 
@@ -41,4 +42,35 @@ if (process.env.APP_URL) {
   }
 }
 
-console.log('배포 설정 형식을 확인했습니다.');
+const secrets = [
+  ['GOOGLE_CLIENT_SECRET_ARN', 'Google OAuth 비밀'],
+  ['ANTHROPIC_SECRET_ARN', 'Claude API 비밀'],
+  ['TELEGRAM_SECRET_ARN', 'Telegram 봇 비밀'],
+];
+for (const [envKey, label] of secrets) {
+  let value;
+  try {
+    value = execFileSync('aws', [
+      'secretsmanager', 'get-secret-value', '--secret-id', process.env[envKey],
+      '--region', 'ap-northeast-2', '--query', 'SecretString', '--output', 'text',
+    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  } catch {
+    console.error(`${label}을 읽을 수 없습니다. AWS 로그인과 Secrets Manager의 비밀값을 확인하세요.`);
+    process.exit(1);
+  }
+  if (!value || value === 'None' || /^(pending|replace-me|example)$/i.test(value)) {
+    console.error(`${label}에 실제 비밀값을 저장해야 합니다.`);
+    process.exit(1);
+  }
+  if (envKey === 'TELEGRAM_SECRET_ARN') {
+    try {
+      const config = JSON.parse(value);
+      if (!config.botToken || !config.chatId) throw new Error();
+    } catch {
+      console.error('Telegram 봇 비밀은 botToken과 chatId가 있는 JSON이어야 합니다.');
+      process.exit(1);
+    }
+  }
+}
+
+console.log('배포 설정과 비밀값을 확인했습니다.');
