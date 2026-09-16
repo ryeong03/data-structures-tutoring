@@ -9,21 +9,15 @@ Site: https://d1nhri0xudbp4k.cloudfront.net/
 ## 우리 서비스의 구조
 
 ```mermaid
-flowchart LR
-    U[튜터·튜티 브라우저] --> CF[CloudFront]
+flowchart TB
+    GH[GitHub Actions] --> CDK[AWS CDK 배포] --> CF[CloudFront]
+    U[튜터·튜티 브라우저] --> CF
+    U --> C[Cognito · Google 로그인]
     CF --> WEB[S3 · 웹 화면]
-    U --> C[Cognito · 로그인]
-    C --> G[Google OAuth]
-    CF --> API[API Gateway · 로그인 검증]
-    API --> L[Lambda · 권한과 서비스 기능]
-    L --> DB[DynamoDB · 일정·공지·응답]
-    L --> FILE[S3 비공개 버킷 · 교수님 PDF]
-    L --> SM[Secrets Manager · 비밀값]
-    L --> AI[Bedrock Claude · 퀴즈 초안]
-    L --> TG[Telegram · 튜터 알림]
-    GH[GitHub Actions] --> CDK[AWS CDK 배포]
-    CDK --> CF
-    CDK --> API
+    CF --> API[API Gateway] --> L[Lambda · 권한 검사와 기능]
+    L --> DB[DynamoDB · 일정과 게시글]
+    L --> FILE[비공개 S3 · 교수님 PDF]
+    L --> EXT[Secrets Manager · Bedrock Claude · Telegram]
 ```
 
 화면은 React·TypeScript로 만들고 S3에 정적 파일로 올립니다. CloudFront가 화면을 전달하고 API 요청을 API Gateway로 보냅니다. Cognito가 Google 로그인 토큰을 발급하며, API Gateway와 Lambda가 로그인과 튜터·튜티 권한을 검사합니다. 일정과 게시글은 DynamoDB에, 교수님 PDF는 별도의 비공개 S3 버킷에 저장합니다. PDF는 권한 검사 후 짧게 유효한 다운로드 링크로 제공합니다. AWS CDK가 이 자원들을 코드로 관리합니다.
