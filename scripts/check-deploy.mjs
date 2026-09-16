@@ -7,7 +7,6 @@ const required = [
   'TUTOR_EMAIL',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET_ARN',
-  'ANTHROPIC_SECRET_ARN',
   'TELEGRAM_SECRET_ARN',
   'COGNITO_DOMAIN_PREFIX',
   'BUDGET_EMAIL',
@@ -44,7 +43,6 @@ if (process.env.APP_URL) {
 
 const secrets = [
   ['GOOGLE_CLIENT_SECRET_ARN', 'Google OAuth 비밀'],
-  ['ANTHROPIC_SECRET_ARN', 'Claude API 비밀'],
   ['TELEGRAM_SECRET_ARN', 'Telegram 봇 비밀'],
 ];
 for (const [envKey, label] of secrets) {

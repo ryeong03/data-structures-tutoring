@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { BedrockRuntimeClient, ConverseCommand, type ContentBlock } from '@aws-sdk/client-bedrock-runtime';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { zipSync, strToU8 } from 'fflate';
 import { all, get, put, remove, joinWithCode, removeJoinedMember, type Item } from './store.js';
@@ -9,7 +9,7 @@ import { sendTutorTelegram } from './telegram.js';
 import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type Rsvp } from '../shared/domain.js';
 import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRsvp } from '../shared/access.js';
 
-const s3=new S3Client({});const secrets=new SecretsManagerClient({});
+const s3=new S3Client({});const bedrock=new BedrockRuntimeClient({});
 const bucket=process.env.FILE_BUCKET||'';
 const ownerEmail=String(process.env.TUTOR_EMAIL||'').trim().toLowerCase();
 const now=()=>new Date().toISOString();
@@ -99,31 +99,22 @@ async function materialUrl(id:string,me:Member){
   const week=data<Week>(await get(`WEEK#${material.weekId}`));if(!week||!canViewWeek(me,week))throw bad('자료를 찾지 못했습니다.',404);
   return {url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:material.key,ResponseContentDisposition:`attachment; filename*=UTF-8''${encodeURIComponent(material.name)}`}),{expiresIn:60})};
 }
-let apiKeyCache:string|undefined;
-async function apiKey(){
-  if(apiKeyCache)return apiKeyCache;
-  const value=await secrets.send(new GetSecretValueCommand({SecretId:process.env.ANTHROPIC_SECRET_ARN}));
-  const raw=value.SecretString||'';
-  try{apiKeyCache=JSON.parse(raw).apiKey;}catch{apiKeyCache=raw;}
-  if(!apiKeyCache)throw bad('Claude API 키가 설정되지 않았습니다.',503);
-  return apiKeyCache;
-}
-const quizSchema={type:'object',additionalProperties:false,properties:{items:{type:'array',items:{type:'object',additionalProperties:false,properties:{question:{type:'string'},choices:{type:'array',items:{type:'string'}},answer:{type:'integer'},explanation:{type:'string'}},required:['question','choices','answer','explanation']}}},required:['items']};
+const quizModel='global.anthropic.claude-sonnet-4-6';
 async function generateQuiz(week:Week,material:Material|undefined,concepts:string){
-  const content:any[]=[];
+  const content:ContentBlock[]=[];
   if(material){
     const object=await s3.send(new GetObjectCommand({Bucket:bucket,Key:material.key}));
     const bytes=await object.Body?.transformToByteArray();if(!bytes)throw bad('PDF를 읽을 수 없습니다.');
-    content.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:Buffer.from(bytes).toString('base64')}});
+    content.push({document:{format:'pdf',name:'lecture-notes',source:{bytes},citations:{enabled:true}}});
   }
-  content.push({type:'text',text:`자료구조 튜터링 ${week.id}주차 예습 퀴즈를 한국어로 만드세요. 주제: ${week.topic}. 핵심 개념: ${concepts}. 객관식 5문항, 보기 각 4개, 정답 인덱스는 0~3. 정의 암기보다 구조 변화 예측과 복잡도 근거를 확인하세요. 업로드 자료에 없는 사실을 자료에 있다고 주장하지 마세요. 각 문항에 간결한 해설을 넣으세요.`});
-  const response=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','anthropic-version':'2023-06-01','x-api-key':await apiKey()},body:JSON.stringify({model:'claude-sonnet-5',max_tokens:4000,messages:[{role:'user',content}],output_config:{format:{type:'json_schema',schema:quizSchema}}}),signal:AbortSignal.timeout(90000)});
-  const result:any=await response.json().catch(()=>({}));
-  if(!response.ok)throw bad(`Claude 요청 실패: ${result.error?.message||response.status}`,502);
-  if(result.stop_reason==='max_tokens'||result.stop_reason==='refusal')throw bad('Claude 응답이 완성되지 않았습니다. 잠시 후 다시 시도해 주세요.',502);
-  const output=result.content?.find((block:any)=>block.type==='text')?.text;
+  content.push({text:`자료구조 튜터링 ${week.id}주차 예습 퀴즈를 한국어로 만드세요. 주제: ${week.topic}. 핵심 개념: ${concepts}. 객관식 5문항, 보기 각 4개, 정답 인덱스는 0~3. 정의 암기보다 구조 변화 예측과 복잡도 근거를 확인하세요. 업로드 자료에 없는 사실을 자료에 있다고 주장하지 마세요. 각 문항에 간결한 해설을 넣으세요. JSON 객체만 반환하세요. 형식: {"items":[{"question":"질문","choices":["보기1","보기2","보기3","보기4"],"answer":0,"explanation":"해설"}]}`});
+  let result;
+  try{result=await bedrock.send(new ConverseCommand({modelId:quizModel,messages:[{role:'user',content}],inferenceConfig:{maxTokens:4000,temperature:0.2}}));}
+  catch(error){console.error('Bedrock quiz generation failed',error);throw bad('Claude 퀴즈 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.',502);}
+  if(result.stopReason!=='end_turn')throw bad('Claude 응답이 완성되지 않았습니다. 잠시 후 다시 시도해 주세요.',502);
+  const output=result.output?.message?.content?.find(block=>block.text)?.text;
   if(!output)throw bad('Claude가 퀴즈를 반환하지 않았습니다.',502);
-  const parsed=JSON.parse(output);
+  const parsed=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,'').trim());
   return {items:validateQuizItems(parsed.items),usage:result.usage||{}};
 }
 async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayProxyStructuredResultV2>{
@@ -268,7 +259,7 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       const concepts=typeof b.concepts==='string'?txt(b.concepts,1000):week.concepts;
       const generated=await generateQuiz(week,material,concepts);
       const quiz:Quiz={weekId:id,title:week.topic,concepts,status:'draft',items:generated.items,source:'ai',updatedAt:now()};
-      await put(item(`QUIZ#${id}`,quiz));await put(item(`AI#${randomUUID()}`,{at:now(),weekId:id,model:'claude-sonnet-5',usage:generated.usage}));
+      await put(item(`QUIZ#${id}`,quiz));await put(item(`AI#${randomUUID()}`,{at:now(),weekId:id,model:quizModel,usage:generated.usage}));
       return json(200,quiz);
     }
     if((match=path.match(/^\/quizzes\/(\d+)$/))&&method==='PUT'){

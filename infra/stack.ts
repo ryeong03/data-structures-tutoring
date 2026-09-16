@@ -15,6 +15,7 @@ import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 const projectDir=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -27,7 +28,6 @@ export class TutoringStack extends Stack {
     const domainPrefix=process.env.COGNITO_DOMAIN_PREFIX||`tutoring-${this.account}`;
     const googleClientId=process.env.GOOGLE_CLIENT_ID||'replace-me.apps.googleusercontent.com';
     const googleSecretArn=process.env.GOOGLE_CLIENT_SECRET_ARN;
-    const anthSecretArn=process.env.ANTHROPIC_SECRET_ARN;
     const telegramSecretArn=process.env.TELEGRAM_SECRET_ARN;
 
     const table=new dynamodb.Table(this,'Records',{
@@ -77,10 +77,13 @@ export class TutoringStack extends Stack {
       environment:{TABLE_NAME:table.tableName,FILE_BUCKET:fileBucket.bucketName,TUTOR_EMAIL:tutorEmail,TUTOR_DISPLAY_NAME:process.env.TUTOR_DISPLAY_NAME||'튜터',
         USER_POOL_ID:pool.userPoolId,USER_POOL_CLIENT_ID:client.userPoolClientId,
         COGNITO_DOMAIN:`${domainPrefix}.auth.${this.region}.amazoncognito.com`,
-        ANTHROPIC_SECRET_ARN:anthSecretArn||'unset',TELEGRAM_SECRET_ARN:telegramSecretArn||'',SITE_URL:appUrl}
+        TELEGRAM_SECRET_ARN:telegramSecretArn||'',SITE_URL:appUrl}
     });
     table.grantReadWriteData(apiFn);fileBucket.grantReadWrite(apiFn);
-    if(anthSecretArn)secrets.Secret.fromSecretCompleteArn(this,'AnthropicSecret',anthSecretArn).grantRead(apiFn);
+    apiFn.addToRolePolicy(new iam.PolicyStatement({actions:['bedrock:InvokeModel'],resources:[
+      `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/global.anthropic.claude-sonnet-4-6`,
+      'arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6'
+    ]}));
     if(telegramSecretArn)secrets.Secret.fromSecretCompleteArn(this,'TelegramSecret',telegramSecretArn).grantRead(apiFn);
     const httpApi=new apigwv2.HttpApi(this,'HttpApi',{createDefaultStage:true});
     const integration=new integrations.HttpLambdaIntegration('ApiIntegration',apiFn);

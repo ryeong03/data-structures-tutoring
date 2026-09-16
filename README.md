@@ -1,6 +1,8 @@
 # 자료구조 튜터링
 
-**Data Structures Peer Tutoring** is a private learning hub for a planned 10-session, 50-minute peer tutoring program. Students explain assigned topics, the tutor clarifies key concepts, and each meeting ends with questions. The site includes a week-by-week map, notices, private materials, attendance, reports, Q&A, and concept quizzes. Built with React, TypeScript, and AWS CDK; cloud deployment requires the account and secrets described below.
+**Data Structures Peer Tutoring** is a private learning hub for a planned 10-session, 50-minute peer tutoring program. Students explain assigned topics, the tutor clarifies key concepts, and each meeting ends with questions. The site includes a week-by-week map, notices, private materials, attendance, reports, Q&A, and concept quizzes. Built with React, TypeScript, and AWS CDK.
+
+Site: https://d1nhri0xudbp4k.cloudfront.net/
 
 튜터 1명과 튜티 최대 5명이 쓰는 자료구조 튜터링 웹사이트입니다. React·TypeScript 화면, Cognito Google 로그인, API Gateway·Lambda, DynamoDB, 비공개 S3 자료 저장소, CloudFront를 AWS CDK로 배포합니다.
 
@@ -36,10 +38,10 @@ npm run synth
 
 ## AWS 배포 준비
 
-1. `ap-northeast-2` 리전의 AWS 계정을 준비하고 로컬에 AWS CLI 인증을 설정합니다. CDK가 사용할 권한에는 CloudFormation, IAM, S3, CloudFront, Lambda, API Gateway, Cognito, DynamoDB, Secrets Manager, Budgets가 포함되어야 합니다.
+1. `ap-northeast-2` 리전의 AWS 계정을 준비하고 로컬에 AWS CLI 인증을 설정합니다. CDK가 사용할 권한에는 CloudFormation, IAM, S3, CloudFront, Lambda, API Gateway, Cognito, DynamoDB, Secrets Manager, Budgets, Bedrock이 포함되어야 합니다.
 2. Google Cloud Console에서 OAuth 동의 화면을 **External**로 설정하고 **웹 애플리케이션** OAuth 클라이언트를 만듭니다. 학교와 개인 계정이 섞여 있으므로 Internal로 설정하면 외부 계정이 막힐 수 있습니다. 승인된 리디렉션 URI로 `https://ryeong-ds-tutoring-2026.auth.ap-northeast-2.amazoncognito.com/oauth2/idpresponse`를 등록합니다. Google Client ID와 Client Secret을 받습니다. 이 앱은 기본 로그인 범위(`openid`, `email`, `profile`)만 사용하며, [Google 정책상 이 범위만 쓰는 앱은 Testing 모드의 테스트 사용자 제한에서 제외될 수 있습니다](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview).
-3. AWS Secrets Manager에 Google Client Secret, Claude API 키, Telegram 봇 설정을 각각 비밀로 저장합니다. Claude 비밀은 원시 키 문자열 또는 `{"apiKey":"..."}` 형식입니다. Telegram 비밀은 `{"botToken":"새 봇 토큰","chatId":"개인 채팅 ID"}` 형식입니다. 비밀은 코드나 `.env`에 넣지 말고 각 비밀의 **전체 ARN**만 사용합니다. 세 비밀은 배포 리전과 계정에 있어야 합니다.
-4. 이미 준비한 `.env`에 Google Client ID와 세 비밀 ARN을 입력합니다. 튜터 이메일, 튜터명, 도메인 접두사, PDF 폴더 경로, 비용 알림 이메일은 로컬 설정에 반영합니다. `.env`, `.local/`, `cdk-outputs.json`은 Git에서 제외됩니다.
+3. AWS Secrets Manager에 Google Client Secret과 Telegram 봇 설정을 각각 비밀로 저장합니다. Telegram 비밀은 `{"botToken":"봇 토큰","chatId":"개인 채팅 ID"}` 형식입니다. 비밀은 코드나 `.env`에 넣지 말고 각 비밀의 **전체 ARN**만 사용합니다. 퀴즈 생성은 AWS Bedrock의 Claude를 사용하므로 별도 Claude API 키는 필요하지 않습니다. Bedrock에서 Anthropic 모델 첫 사용 양식을 제출해야 합니다.
+4. 이미 준비한 `.env`에 Google Client ID와 두 비밀 ARN을 입력합니다. 튜터 이메일, 튜터명, 도메인 접두사, PDF 폴더 경로, 비용 알림 이메일은 로컬 설정에 반영합니다. `.env`, `.local/`, `cdk-outputs.json`은 Git에서 제외됩니다.
 
 Telegram 채팅 ID는 새 토큰으로 봇에게 `/start`를 보낸 후 이 프로젝트에서 `npm run telegram:chat-id`로 확인할 수 있습니다. 터미널에서 토큰을 숨겨 입력하며, 화면에는 채팅 ID만 출력합니다. 채팅 ID와 토큰을 Secrets Manager에 등록한 뒤에는 사이트가 튜티의 가입, 참석 응답, 질문·답글, 보고서 제출, 진도 기록, 퀴즈 제출을 튜터에게 알립니다. 알림 본문에는 보고서·질문 내용과 퀴즈 답안을 넣지 않습니다.
 
@@ -59,6 +61,10 @@ npm run deploy
 
 배포 명령은 로컬 자료구조 PDF를 비공개 S3 버킷으로 가져옵니다. 튜티 이름·학번·전화번호 명단은 배포 파일에 넣거나 일괄 업로드하지 않습니다. 참가자는 직접 Google 계정과 가입코드로 가입하며, 사이트에는 가입에 필요한 계정 이메일과 표시 이름만 보관합니다. 나중에 자료를 다시 가져오려면 `npm run import:local`을 실행합니다.
 
+### CI/CD
+
+`.github/workflows/deploy.yml`은 Pull Request에서 타입 검사·테스트·웹 빌드를 실행합니다. `main`에 푸시하면 같은 검사를 통과한 뒤 AWS CDK로 사이트를 자동 배포합니다. GitHub Actions는 이 저장소의 `main` 브랜치에만 허용된 AWS OIDC 역할을 사용하며, AWS 장기 액세스 키나 Google·Telegram 비밀값은 GitHub에 저장하지 않습니다. 배포에 필요한 공개 설정과 Secrets Manager ARN은 GitHub Actions 저장소 변수에 있습니다. 교수님 PDF는 GitHub Actions에서 다루지 않고 비공개 S3에 보관하며, 자료를 바꿀 때만 이 컴퓨터에서 `npm run import:local`을 실행합니다.
+
 ## 처음 접속한 뒤
 
 1. `TUTOR_EMAIL`과 일치하는 Google 계정으로 로그인합니다. 이 계정이 유일한 튜터입니다.
@@ -72,6 +78,6 @@ npm run deploy
 
 ## 비용과 비밀
 
-월 AWS 비용 예산은 50 USD이며 실제 지출 10 USD와 50 USD에 이메일 알림을 보냅니다. AWS Billing 콘솔에서 **100 USD 크레딧의 잔액과 만료일**을 직접 확인하세요. 예산은 사용을 자동 중지하지 않습니다. Claude API 비용은 AWS 크레딧과 별개이며, 버튼을 눌러 성공적으로 생성한 초안의 토큰 사용량은 튜터 화면에 기록됩니다.
+월 AWS 비용 예산은 50 USD이며 실제 지출 10 USD와 50 USD에 이메일 알림을 보냅니다. 예산은 사용을 자동 중지하지 않습니다. Claude 퀴즈 생성은 Bedrock 사용량으로 과금되며, 성공적으로 생성한 초안의 토큰 사용량은 튜터 화면에 기록됩니다.
 
 자료 버킷은 공개 접근을 차단합니다. PDF는 로그인·권한 확인 뒤 60초 유효한 링크로 받습니다. DynamoDB의 시점 복구가 켜져 있습니다. 사이트와 자료 버킷, 데이터베이스는 스택 삭제 시 보존하도록 설정했습니다.

@@ -1,0 +1,59 @@
+name: Check and deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tutoring-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_DEPLOY_REGION: ap-northeast-2
+      APP_URL: ${{ vars.APP_URL }}
+      TUTOR_EMAIL: ${{ vars.TUTOR_EMAIL }}
+      TUTOR_DISPLAY_NAME: ${{ vars.TUTOR_DISPLAY_NAME }}
+      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET_ARN: ${{ vars.GOOGLE_CLIENT_SECRET_ARN }}
+      TELEGRAM_SECRET_ARN: ${{ vars.TELEGRAM_SECRET_ARN }}
+      COGNITO_DOMAIN_PREFIX: ${{ vars.COGNITO_DOMAIN_PREFIX }}
+      BUDGET_EMAIL: ${{ vars.BUDGET_EMAIL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - run: npm run build
+      - run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
