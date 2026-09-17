@@ -16,6 +16,7 @@ type Workspace={id:string;name:string;tutorEmail:string;tutorName:string;created
 const defaultWorkspace=():Workspace=>({id:DEFAULT_WORKSPACE,name:'자료구조 튜터링',tutorEmail:ownerEmail,tutorName:String(process.env.TUTOR_DISPLAY_NAME||'튜터'),createdAt:'2026-09-17T00:00:00.000Z',active:true});
 async function workspaceList():Promise<Workspace[]>{return [defaultWorkspace(),...(await allGlobal()).filter(row=>row.pk.startsWith('WORKSPACE#')).map(row=>row.data as Workspace).filter(w=>w.id!==DEFAULT_WORKSPACE)].filter(w=>w.active);}
 async function workspaceFor(id:string):Promise<Workspace|undefined>{return id===DEFAULT_WORKSPACE?defaultWorkspace():((await getGlobal(`WORKSPACE#${id}`))?.data as Workspace|undefined);}
+const publicWorkspace=(workspace:Workspace)=>({id:workspace.id,name:workspace.name,tutorName:workspace.tutorName,active:workspace.active});
 async function accountWorkspaces(email:string):Promise<Workspace[]>{if(email===ownerEmail)return workspaceList();const ids=(await queryGlobal(`ACCOUNT#${email}`)).map(row=>row.sk.slice(3));if(await getGlobal(`MEMBER#${email}`))ids.unshift(DEFAULT_WORKSPACE);const unique=[...new Set(ids)];return (await Promise.all(unique.map(workspaceFor))).filter((w):w is Workspace=>!!w?.active);}
 const now=()=>new Date().toISOString();
 const bad=(message:string,status=400)=>Object.assign(new Error(message),{status});
@@ -101,7 +102,7 @@ async function state(me:Member){
   const tutorWeeks=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('TUTORWEEK#')).map(x=>x.data):undefined;
   const aiUsage=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('AI#')).map(x=>x.data).sort((a,b)=>b.at.localeCompare(a.at)):undefined;
   const activityLog=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('AUDIT#')).map(x=>x.data).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,100):undefined;
-  return {workspace,workspaces,isAdmin:me.email===ownerEmail,me:me.role==='tutor'?me:{...publicMember(me),email:me.email},members:me.role==='tutor'?allMembers:members.map(publicMember),weeks,notices,materials,questions,reports,quizzes,attempts,rsvps,config,tutorWeeks,aiUsage,activityLog,inviteActive:me.role==='tutor'?rows.some(x=>x.pk==='INVITE#CURRENT'):undefined};
+  return {workspace:workspace&&publicWorkspace(workspace),workspaces:workspaces.map(publicWorkspace),isAdmin:me.email===ownerEmail,me:me.role==='tutor'?me:{...publicMember(me),email:me.email},members:me.role==='tutor'?allMembers:members.map(publicMember),weeks,notices,materials,questions,reports,quizzes,attempts,rsvps,config,tutorWeeks,aiUsage,activityLog,inviteActive:me.role==='tutor'?rows.some(x=>x.pk==='INVITE#CURRENT'):undefined};
 }
 async function materialUrl(id:string,me:Member){
   const material=data<Material>(await get(`MATERIAL#${id}`));if(!material)throw bad('자료를 찾지 못했습니다.',404);
