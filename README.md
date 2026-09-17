@@ -50,7 +50,7 @@ flowchart TB
     CF --> API[API Gateway] --> L[Lambda · 권한 검사와 기능]
     L --> DB[DynamoDB · 수업별 일정과 게시글]
     L --> FILE[비공개 S3 · 교수님 PDF]
-    L --> EXT[Secrets Manager · Bedrock Claude · Telegram]
+    L --> EXT[Secrets Manager · Telegram]
 ```
 
 첫 튜터 계정은 전체 수업을 관리하는 운영자입니다. 새 튜터의 수업은 같은 10주 자료구조 형식으로 시작하며, 가입코드·튜티·자료·공지·보고서·질문·퀴즈·로그는 수업 공간별로 분리됩니다. 기존 수업은 기존 DynamoDB 키를 그대로 사용합니다. 새 수업에는 수업 ID를 붙인 별도 키를 사용하므로 기존 데이터 이전이 필요하지 않습니다.
@@ -100,9 +100,9 @@ npm run synth
 
 ## AWS 배포 준비
 
-1. `ap-northeast-2` 리전의 AWS 계정을 준비하고 로컬에 AWS CLI 인증을 설정합니다. CDK가 사용할 권한에는 CloudFormation, IAM, S3, CloudFront, Lambda, API Gateway, Cognito, DynamoDB, Secrets Manager, Budgets, Bedrock이 포함되어야 합니다.
+1. `ap-northeast-2` 리전의 AWS 계정을 준비하고 로컬에 AWS CLI 인증을 설정합니다. CDK가 사용할 권한에는 CloudFormation, IAM, S3, CloudFront, Lambda, API Gateway, Cognito, DynamoDB, Secrets Manager, Budgets가 포함되어야 합니다.
 2. Google Cloud Console에서 OAuth 동의 화면을 **External**로 설정하고 **웹 애플리케이션** OAuth 클라이언트를 만듭니다. 학교와 개인 계정이 섞여 있으므로 Internal로 설정하면 외부 계정이 막힐 수 있습니다. 승인된 리디렉션 URI로 `https://ryeong-ds-tutoring-2026.auth.ap-northeast-2.amazoncognito.com/oauth2/idpresponse`를 등록합니다. Google Client ID와 Client Secret을 받습니다. 이 앱은 기본 로그인 범위(`openid`, `email`, `profile`)만 사용하며, [Google 정책상 이 범위만 쓰는 앱은 Testing 모드의 테스트 사용자 제한에서 제외될 수 있습니다](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview).
-3. AWS Secrets Manager에 Google Client Secret과 Telegram 봇 설정을 각각 비밀로 저장합니다. Telegram 비밀은 `{"botToken":"봇 토큰","chatId":"개인 채팅 ID"}` 형식입니다. 비밀은 코드나 `.env`에 넣지 말고 각 비밀의 **전체 ARN**만 사용합니다. 퀴즈 생성은 AWS Bedrock의 Claude를 사용하므로 별도 Claude API 키는 필요하지 않습니다. Bedrock에서 Anthropic 모델 첫 사용 양식을 제출해야 합니다.
+3. AWS Secrets Manager에 Google Client Secret과 Telegram 봇 설정을 각각 비밀로 저장합니다. Telegram 비밀은 `{"botToken":"봇 토큰","chatId":"개인 채팅 ID"}` 형식입니다. 비밀은 코드나 `.env`에 넣지 말고 각 비밀의 **전체 ARN**만 사용합니다.
 4. 이미 준비한 `.env`에 Google Client ID와 두 비밀 ARN을 입력합니다. 튜터 이메일, 튜터명, 도메인 접두사, PDF 폴더 경로, 비용 알림 이메일은 로컬 설정에 반영합니다. `.env`, `.local/`, `cdk-outputs.json`은 Git에서 제외됩니다.
 
 현재 Telegram 알림은 기존 수업의 박세령 튜터에게만 보냅니다. 다른 튜터 수업의 학생 활동을 기존 봇으로 전달하지 않아 공간 간 정보가 섞이지 않습니다. 새 튜터별 Telegram 알림은 별도 봇 설정 후 연결해야 합니다.
@@ -136,12 +136,16 @@ npm run deploy
 3. 튜터 전용 명단에서 가입한 튜티의 표시 이름과 권한을 고칠 수 있습니다. 참여하지 않는 튜티는 명단에서 제외해 새 참가자 자리를 만들 수 있습니다. 대표튜티 한 명을 지정합니다. 대표튜티는 공개된 주차의 자료와 도달 페이지를 기록합니다.
 4. 다섯 번째 튜티가 가입하면 10회 보고서 담당자가 각 2회씩 자동 배정됩니다. 다섯 명이 확정되지 않아도 튜터가 주차별 담당자를 직접 지정할 수 있습니다.
 5. **일정·자료**에서 잠정 날짜와 주제, 장소, 보고서 담당자를 검토한 뒤 각 주차를 공개합니다. PDF는 10MB 이하로 올립니다. **Zoom 모임**에서 링크를, **홈**의 게시판에서 공지를 등록합니다.
-6. **개념 퀴즈**에서 핵심 개념과 PDF를 골라 Claude 초안을 만들거나 [HTML 공통 템플릿](web/public/quiz-template.html)을 업로드합니다. 문항·정답·해설을 검토한 뒤 공개합니다. 튜티 답안은 서버에서 채점합니다.
+6. **개념 퀴즈**에서 주차별 생성 프롬프트를 복사해 튜터 자신의 AI 도구로 5문항 JSON을 만든 뒤 붙여 넣습니다. [HTML 공통 템플릿](web/public/quiz-template.html) 업로드도 가능합니다. 문항·정답·해설을 검토한 뒤 공개하며, 튜티 답안은 서버에서 채점합니다.
 
 출석, 세션 메모, 제출 현황, AI 사용 기록, 활동 로그, 전체 기록 ZIP 다운로드는 튜터에게만 제공됩니다. 튜터는 튜티 화면 미리보기를 사용할 수 있습니다. 사용 중인 계정이 비활성화되면 서버가 매 요청마다 접근을 차단합니다.
 
+### 개인 AI 키
+
+개인 API 키는 사이트에 입력하거나 AWS에 저장하지 않습니다. 각 튜터가 자신의 컴퓨터에서 AI 도구를 사용하고 **생성한 퀴즈 문항만** 사이트로 가져옵니다. 따라서 수업 운영자도 다른 튜터의 키를 사이트에서 조회할 수 없습니다. 서버의 Bedrock 퀴즈 생성 호출은 제거했습니다. 학교에서 제공한 API의 사용 조건과 연결 보안은 각자 확인해야 합니다.
+
 ## 운영 비용과 자료 접근
 
-월 AWS 비용 예산은 50 USD이며 실제 지출 10 USD와 50 USD에 이메일 알림을 보냅니다. 예산은 사용을 자동 중지하지 않습니다. Claude 퀴즈 생성은 Bedrock 사용량으로 과금되며, 성공적으로 생성한 초안의 토큰 사용량은 튜터 화면에 기록됩니다.
+월 AWS 비용 예산은 50 USD이며 실제 지출 10 USD와 50 USD에 이메일 알림을 보냅니다. 예산은 사용을 자동 중지하지 않습니다. 사이트는 AI 호출 비용을 발생시키지 않으며, 이전 생성 기록의 토큰 사용량은 튜터 화면에 남아 있습니다.
 
 자료 버킷은 공개 접근을 차단합니다. 주차 자료 PDF는 로그인·권한 확인 뒤 60초 유효한 링크로, 공지 PDF는 권한 확인 뒤 5분 유효한 뷰어 링크로 제공합니다. DynamoDB의 시점 복구가 켜져 있습니다. 사이트와 자료 버킷, 데이터베이스는 스택 삭제 시 보존하도록 설정했습니다.

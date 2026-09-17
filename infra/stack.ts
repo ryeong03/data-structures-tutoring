@@ -15,7 +15,6 @@ import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
-import * as iam from 'aws-cdk-lib/aws-iam';
 
 const projectDir=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -80,10 +79,6 @@ export class TutoringStack extends Stack {
         TELEGRAM_SECRET_ARN:telegramSecretArn||'',SITE_URL:appUrl}
     });
     table.grantReadWriteData(apiFn);fileBucket.grantReadWrite(apiFn);
-    apiFn.addToRolePolicy(new iam.PolicyStatement({actions:['bedrock:InvokeModel'],resources:[
-      `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/global.anthropic.claude-sonnet-4-6`,
-      'arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6'
-    ]}));
     if(telegramSecretArn)secrets.Secret.fromSecretCompleteArn(this,'TelegramSecret',telegramSecretArn).grantRead(apiFn);
     const httpApi=new apigwv2.HttpApi(this,'HttpApi',{createDefaultStage:true});
     const integration=new integrations.HttpLambdaIntegration('ApiIntegration',apiFn);

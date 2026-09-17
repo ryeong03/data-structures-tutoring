@@ -1,4 +1,4 @@
-import { seedWeeks, kickoffNotice, gradeQuiz, parseQuizHtml, type Member, type Notice, type Question, type Quiz, type Report, type Week, type Material, type Rsvp } from '../../shared/domain';
+import { seedWeeks, kickoffNotice, gradeQuiz, parseQuizHtml, validateQuizItems, type Member, type Notice, type Question, type Quiz, type Report, type Week, type Material, type Rsvp } from '../../shared/domain';
 import type { State, Workspace } from './state';
 
 const names=['Sample student 1','Sample student 2','Sample student 3','Sample student 4','Sample student 5'];
@@ -32,6 +32,7 @@ export async function demoApi(path:string,method='GET',data:any={}):Promise<any>
   if(path==='/questions'&&method==='POST'){questions.unshift({id:crypto.randomUUID(),title:data.title,body:data.body,authorId:'tutor',createdAt:new Date().toISOString(),resolved:false,replies:[]});return {ok:true};}
   match=path.match(/^\/reports\/(\d+)$/);if(match&&method==='PUT'){const id=Number(match[1]);reports.splice(0,reports.length,...reports.filter(r=>r.weekId!==id));reports.push({weekId:id,authorId:'tutor',content:data.content,status:data.status,updatedAt:new Date().toISOString()});return {ok:true};}
   match=path.match(/^\/quizzes\/(\d+)\/html$/);if(match&&method==='POST'){const id=Number(match[1]);const q:Quiz={weekId:id,title:weeks[id-1].topic,concepts:weeks[id-1].concepts,status:'draft',source:'html',updatedAt:new Date().toISOString(),items:parseQuizHtml(data.html)};quizzes.splice(0,quizzes.length,...quizzes.filter(x=>x.weekId!==id));quizzes.push(q);return q;}
+  match=path.match(/^\/quizzes\/(\d+)\/json$/);if(match&&method==='POST'){const id=Number(match[1]);const parsed=JSON.parse(data.json);const q:Quiz={weekId:id,title:weeks[id-1].topic,concepts:weeks[id-1].concepts,status:'draft',source:'manual',updatedAt:new Date().toISOString(),items:validateQuizItems(Array.isArray(parsed)?parsed:parsed.items)};quizzes.splice(0,quizzes.length,...quizzes.filter(x=>x.weekId!==id));quizzes.push(q);return q;}
   match=path.match(/^\/quizzes\/(\d+)\/generate$/);if(match&&method==='POST')throw new Error('로컬 미리보기에서는 Claude API가 호출되지 않습니다.');
   match=path.match(/^\/quizzes\/(\d+)$/);if(match&&method==='PUT'){const q=quizzes.find(x=>x.weekId===Number(match![1]));if(q)Object.assign(q,data,{updatedAt:new Date().toISOString()});return q;}
   match=path.match(/^\/quizzes\/(\d+)\/attempts$/);if(match&&method==='POST'){const q=quizzes.find(x=>x.weekId===Number(match![1]));if(!q)throw new Error('퀴즈가 없습니다.');const result=gradeQuiz(q.items,data.answers);const attempt={weekId:q.weekId,memberId:'tutor',at:new Date().toISOString(),answers:data.answers,score:result.score};attempts.push(attempt);return {...attempt,details:result.details};}

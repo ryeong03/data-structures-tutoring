@@ -1,7 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { BedrockRuntimeClient, ConverseCommand, type ContentBlock } from '@aws-sdk/client-bedrock-runtime';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { zipSync, strToU8 } from 'fflate';
 import { all, allGlobal, get, getGlobal, put, putGlobal, remove, queryGlobal, withWorkspace, workspaceId, DEFAULT_WORKSPACE, joinWithCode, removeJoinedMember, type Item } from './store.js';
@@ -10,7 +9,7 @@ import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, pars
 import { isPdfHeader, noticePdfKey, validPdfUpload } from './notice-attachment.js';
 import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRsvp } from '../shared/access.js';
 
-const s3=new S3Client({});const bedrock=new BedrockRuntimeClient({});
+const s3=new S3Client({});
 const bucket=process.env.FILE_BUCKET||'';
 const ownerEmail=String(process.env.TUTOR_EMAIL||'').trim().toLowerCase();
 type Workspace={id:string;name:string;tutorEmail:string;tutorName:string;createdAt:string;active:boolean};
@@ -117,24 +116,6 @@ async function noticeAttachmentUrl(id:string){
     Bucket:bucket,Key:noticePdfKey(workspaceId(),notice.attachment.id),
     ResponseContentType:'application/pdf',ResponseContentDisposition:'inline'
   }),{expiresIn:300})};
-}
-const quizModel='global.anthropic.claude-sonnet-4-6';
-async function generateQuiz(week:Week,material:Material|undefined,concepts:string){
-  const content:ContentBlock[]=[];
-  if(material){
-    const object=await s3.send(new GetObjectCommand({Bucket:bucket,Key:material.key}));
-    const bytes=await object.Body?.transformToByteArray();if(!bytes)throw bad('PDF를 읽을 수 없습니다.');
-    content.push({document:{format:'pdf',name:'lecture-notes',source:{bytes},citations:{enabled:true}}});
-  }
-  content.push({text:`자료구조 튜터링 ${week.id}주차 예습 퀴즈를 한국어로 만드세요. 주제: ${week.topic}. 핵심 개념: ${concepts}. 객관식 5문항, 보기 각 4개, 정답 인덱스는 0~3. 정의 암기보다 구조 변화 예측과 복잡도 근거를 확인하세요. 업로드 자료에 없는 사실을 자료에 있다고 주장하지 마세요. 각 문항에 간결한 해설을 넣으세요. JSON 객체만 반환하세요. 형식: {"items":[{"question":"질문","choices":["보기1","보기2","보기3","보기4"],"answer":0,"explanation":"해설"}]}`});
-  let result;
-  try{result=await bedrock.send(new ConverseCommand({modelId:quizModel,messages:[{role:'user',content}],inferenceConfig:{maxTokens:4000,temperature:0.2}}));}
-  catch(error){console.error('Bedrock quiz generation failed',error);throw bad('Claude 퀴즈 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.',502);}
-  if(result.stopReason!=='end_turn')throw bad('Claude 응답이 완성되지 않았습니다. 잠시 후 다시 시도해 주세요.',502);
-  const output=result.output?.message?.content?.find(block=>block.text)?.text;
-  if(!output)throw bad('Claude가 퀴즈를 반환하지 않았습니다.',502);
-  const parsed=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,'').trim());
-  return {items:validateQuizItems(parsed.items),usage:result.usage||{}};
 }
 async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayProxyStructuredResultV2>{
   try{
@@ -314,14 +295,19 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       const week=data<Week>(await get(`WEEK#${id}`));if(!week)throw bad('주차를 찾지 못했습니다.',404);
       const quiz:Quiz={weekId:id,title:week.topic,concepts:week.concepts,status:'draft',items,source:'html',updatedAt:now()};await put(item(`QUIZ#${id}`,quiz));return json(200,quiz);
     }
+    if((match=path.match(/^\/quizzes\/(\d+)\/json$/))&&method==='POST'){
+      must(me,['tutor']);const id=weekId(match[1]);
+      const week=data<Week>(await get(`WEEK#${id}`));if(!week)throw bad('주차를 찾지 못했습니다.',404);
+      let parsed:unknown;
+      try{parsed=JSON.parse(txt(b.json,50000));}catch{throw bad('JSON 형식을 확인해 주세요.');}
+      const raw=Array.isArray(parsed)?parsed:parsed&&typeof parsed==='object'?'items' in parsed?(parsed as {items:unknown}).items:undefined:undefined;
+      const items=validate(()=>validateQuizItems(raw));
+      const quiz:Quiz={weekId:id,title:week.topic,concepts:week.concepts,status:'draft',items,source:'manual',updatedAt:now()};
+      await put(item(`QUIZ#${id}`,quiz));return json(200,quiz);
+    }
     if((match=path.match(/^\/quizzes\/(\d+)\/generate$/))&&method==='POST'){
-      must(me,['tutor']);const id=weekId(match[1]),week=data<Week>(await get(`WEEK#${id}`));if(!week)throw bad('주차를 찾지 못했습니다.',404);
-      let material:Material|undefined;if(b.materialId){material=data<Material>(await get(`MATERIAL#${txt(b.materialId,100)}`));if(!material||material.weekId!==id)throw bad('이 주차의 PDF를 선택해 주세요.');}
-      const concepts=typeof b.concepts==='string'?txt(b.concepts,1000):week.concepts;
-      const generated=await generateQuiz(week,material,concepts);
-      const quiz:Quiz={weekId:id,title:week.topic,concepts,status:'draft',items:generated.items,source:'ai',updatedAt:now()};
-      await put(item(`QUIZ#${id}`,quiz));await put(item(`AI#${randomUUID()}`,{at:now(),weekId:id,model:quizModel,usage:generated.usage}));
-      return json(200,quiz);
+      must(me,['tutor']);
+      throw bad('AI 퀴즈 생성 연결을 준비 중입니다. HTML 퀴즈를 올려 주세요.',503);
     }
     if((match=path.match(/^\/quizzes\/(\d+)$/))&&method==='PUT'){
       must(me,['tutor']);const id=weekId(match[1]);const prior=data<Quiz>(await get(`QUIZ#${id}`));if(!prior)throw bad('먼저 퀴즈 초안을 만들어 주세요.',404);
