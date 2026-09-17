@@ -86,3 +86,25 @@ html:is([lang="ru"],[lang="kk"]) .board-face small{font-size:.58rem}
 @media(max-width:900px){.map-top-actions>div{justify-content:flex-start}}@media(max-width:720px){.map-top-actions .schedule-note{gap:8px 13px}.schedule-note>span:not(.break-note):before,.schedule-note .break-note:before{margin-right:8px}}
 
 .logout-button{flex:none;border:1px solid #e5dbef;background:#fff;color:#5c4b77;border-radius:999px;padding:9px 15px;font:inherit;font-size:.76rem;font-weight:700;white-space:nowrap;cursor:pointer;box-shadow:0 2px 8px #3422440d}.logout-button:hover,.logout-button:focus-visible{background:#f5efff;border-color:#cbb8e2}.logout-button:focus-visible{outline:2px solid #7657a8;outline-offset:2px}@media(max-width:720px){.top-tools .term-pill{display:none}.logout-button{padding:8px 11px;font-size:.69rem}}
+
+/* Login uses the same illustrated world as the weekly map. */
+.login-page{display:flex;align-items:center;justify-content:center;min-height:100svh;padding:32px;background:#f8f5fc}
+.login-layout{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(440px,.92fr);width:min(1480px,100%);min-height:min(760px,calc(100svh - 64px));padding:12px;background:#fff;border:1px solid #ece5f3;border-radius:30px;box-shadow:0 24px 70px #35254c17;overflow:hidden}
+.login-art{position:relative;min-height:0;background:#5a9b5b;border-radius:21px;overflow:hidden}
+.login-art:before{display:none}
+.login-art:after{content:'';position:absolute;inset:auto 0 0;height:39%;width:auto;border:0;border-radius:0;background:linear-gradient(transparent,#142d238a);pointer-events:none}
+.login-art img{display:block;width:100%;height:100%;position:absolute;inset:0;object-fit:cover;object-position:49% center}
+.login-art-copy{position:absolute;z-index:2;left:clamp(25px,4vw,58px);bottom:clamp(25px,4vw,54px);display:flex;flex-direction:column;gap:8px;color:#fff;text-shadow:0 2px 12px #142d2370}
+.login-art-copy span{font-size:.82rem;font-weight:700;letter-spacing:.04em}
+.login-art-copy strong{font-family:'BM Jua',sans-serif;font-size:clamp(1.8rem,2.4vw,2.7rem);font-weight:400;line-height:1.16}
+.login-panel{display:flex;align-items:center;justify-content:center;width:100%;max-width:none;margin:0;padding:clamp(50px,6vw,96px)}
+.login-panel-inner{width:100%;max-width:480px}
+.login-panel .eyebrow{display:block;margin-bottom:26px;color:#765ba0;font-size:.72rem;letter-spacing:.13em}
+.login-panel .brand-mark{font-size:1.5rem;margin-bottom:42px;color:#392b4b}
+.login-panel h1{font-size:clamp(2.4rem,3.1vw,3.4rem);line-height:1.23;letter-spacing:-.035em;margin:0 0 19px;color:#2d2539;word-break:keep-all}
+.login-panel p{font-size:1rem;line-height:1.7;color:#675f70;margin:0 0 34px;word-break:keep-all}
+.login-panel .button{width:100%;min-width:0;min-height:58px;padding:16px 20px;border-radius:14px;font-size:.92rem;box-shadow:0 6px 16px #51397d27}
+.login-panel small{display:block;margin-top:16px;font-size:.78rem;line-height:1.55;color:#82798c;word-break:keep-all}
+html:is([lang="en"],[lang="ru"],[lang="kk"]) .login-art-copy strong,html:is([lang="en"],[lang="ru"],[lang="kk"]) .login-panel .brand-mark,html:is([lang="en"],[lang="ru"],[lang="kk"]) .login-panel h1{font-family:Arial,'Apple SD Gothic Neo',sans-serif;font-weight:800;letter-spacing:-.035em}
+@media(max-width:900px){.login-layout{grid-template-columns:minmax(0,1fr) minmax(400px,1fr)}.login-panel{padding:45px}}
+@media(max-width:720px){.login-page{display:block;padding:16px;min-height:100svh}.login-page>.language-button{top:28px;right:28px}.login-layout{display:flex;flex-direction:column;min-height:0;padding:8px;border-radius:23px}.login-art{height:240px;min-height:240px;border-radius:16px}.login-art img{object-position:center 53%}.login-art-copy{left:21px;bottom:20px;gap:4px}.login-art-copy strong{font-size:1.7rem}.login-panel{padding:32px 23px 27px}.login-panel .eyebrow{margin-bottom:16px}.login-panel .brand-mark{font-size:1.2rem;margin-bottom:25px}.login-panel h1{font-size:2rem;margin-bottom:12px}.login-panel p{font-size:.88rem;margin-bottom:24px}.login-panel .button{min-height:53px;font-size:.84rem}}
