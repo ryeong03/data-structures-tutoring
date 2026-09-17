@@ -57,9 +57,9 @@
 
 튜티가 가입하거나 참석 여부를 답하고, 질문·답글·보고서·퀴즈 답안을 제출하거나 진도를 기록하면 기존 수업의 튜터에게 알림이 갑니다. 알림에는 활동 종류와 작성자만 담고 질문·보고서 본문과 퀴즈 답안은 보내지 않습니다. 다른 튜터의 수업은 별도 봇 설정이 필요합니다. 연결 방법은 [배포 문서](docs/DEPLOYMENT.md)에 있습니다.
 
-<p align="center"><img src="docs/media/telegram-alerts.png" alt="봇 이름, 학생 이름, 사이트 이름과 주소를 예시로 바꾼 Telegram 알림 화면" width="460"></p>
+<p align="center"><img src="docs/media/telegram-alerts.png" alt="봇 이름, 학생 이름, 사이트 이름과 주소를 블러 처리한 Telegram 가입 알림 화면" width="460"></p>
 
-<p align="center"><sub>공개용 이미지: 봇·학생·서비스 이름과 주소를 모두 예시 값으로 바꿨습니다.</sub></p>
+<p align="center"><sub>공개용 이미지: 봇·학생·서비스 이름과 주소를 블러 처리했습니다.</sub></p>
 
 ## 빠른 시작
 
