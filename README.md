@@ -1,6 +1,6 @@
 # 자료구조 튜터링
 
-**Data Structures Peer Tutoring** is a private learning hub for a planned 10-session, 50-minute peer tutoring program. Students explain assigned topics, the tutor clarifies key concepts, and each meeting ends with questions. The site includes a week-by-week map, notices, private materials, attendance, reports, Q&A, and concept quizzes. Built with React, TypeScript, and AWS CDK.
+**Data Structures Peer Tutoring** is a private learning hub for small tutoring groups. Students explain assigned topics, the tutor clarifies key concepts, and each meeting ends with questions. The site includes a weekly map, notices, private materials, attendance, reports, Q&A, and concept quizzes. Built with React, TypeScript, and AWS CDK.
 
 Site: https://d1nhri0xudbp4k.cloudfront.net/
 
@@ -68,17 +68,9 @@ flowchart TB
 
 이 서비스는 웹 정적 파일과 요청이 들어올 때 실행되는 Lambda 함수로 충분합니다. 나중에 상시 실행 서버나 여러 컨테이너 서비스가 필요해지면 그때 컨테이너 플랫폼을 검토하면 됩니다.
 
-## 현재 잠정 일정
+## 이미지와 글꼴
 
-첫 미팅은 **2026년 9월 17일(목) 18:30, Zoom**입니다. 소개와 운영 안내를 위한 모임이며, 링크는 튜터가 받는 대로 **Zoom 모임** 탭에 등록합니다. 이 안내는 탐험 지도 게시판의 첫 공지에도 준비했습니다.
-
-정규 튜터링은 **화요일 11:00~11:50**입니다. 장소는 공간 대여 현황에 따라 정하고 **모임 전날 웹사이트에 공지**합니다. 일부 모임은 비대면으로 진행할 수 있습니다. 최초 10회는 9/22, 9/29, 10/6, 10/13, 10/27, 11/3, 11/10, 11/17, 11/24, 12/1로 입력되며, **10/20은 시험기간 휴강**입니다. 주제와 장소는 튜터가 확인하기 전까지 비공개이며 사이트에서 수정할 수 있습니다. 2학기 수업계획서와 현재 받은 PDF를 참고해 주제 초안을 입력했습니다.
-
-매주 튜티 4~5명이 그 주에 배운 내용을 파트별로 5~10분씩 설명합니다. 각 설명 뒤 튜터가 핵심을 정리하고 마지막 약 10분은 질문에 답합니다. 이 흐름은 운영계획에서 확인할 수 있습니다.
-
-홈은 10개 돌로 구성된 탐험 지도입니다. 돌을 누르면 해당 주차의 일정과 자료를 확인할 수 있고, 지도 안의 나무 게시판을 누르면 공지사항이 팝업으로 열립니다. 튜터는 공지에 10MB 이하 PDF를 첨부할 수 있고, 로그인한 팀원은 게시판에서 PDF 뷰어로 바로 열 수 있습니다. 공지 PDF는 수업별 비공개 S3에 저장되며, 열 때마다 서버가 수업 접근 권한을 확인합니다. [이화사이버캠퍼스](https://cyber.ewha.ac.kr/) 바로가기도 지도 위에 있습니다. 지도 배경은 [Kitbitz Nature Kit](https://kitbitz.art/kits/nature-kit)의 [공식 월드 이미지](https://kitbitz.art/world-previews/nature.webp), 돌은 [Kitbitz의 CC0 에셋](https://github.com/CaptExcellent/kits-library-assets)을 사용합니다.
-
-제목에는 배달의민족 **주아체**, 본문에는 **한나체 Air**를 적용했습니다. 두 글꼴의 저작권과 사용 조건은 [우아한형제들 글꼴 안내](https://www.woowahan.com/fonts)와 [라이선스](https://www.woowahan.com/fonts/license)에 따릅니다. 함께 배포하는 라이선스 사본은 [LICENSE.txt](web/public/fonts/LICENSE.txt)에 있습니다.
+지도에는 [Kitbitz Nature Kit](https://kitbitz.art/kits/nature-kit)의 월드 이미지와 [Kitbitz CC0 에셋](https://github.com/CaptExcellent/kits-library-assets)을 사용합니다. 제목과 본문에는 배달의민족 주아체와 한나체 Air를 사용하며, [글꼴 사용 조건](https://www.woowahan.com/fonts/license)과 [라이선스 사본](web/public/fonts/LICENSE.txt)을 함께 제공합니다.
 
 ## 로컬 확인
 

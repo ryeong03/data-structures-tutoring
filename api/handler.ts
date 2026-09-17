@@ -131,7 +131,10 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
         const workspace:Workspace={id,name,tutorEmail:email,tutorName,createdAt:at,active:true};
         const tutor:Member={id:randomUUID(),email,name:tutorName,role:'tutor',active:true,createdAt:at};
         try{await redeemTutorInvite(codeHash(code),email,item(`WORKSPACE#${id}`,workspace),item(`MEMBER#${email}`,tutor),at);}
-        catch{throw bad('튜터 초대코드가 유효하지 않거나 이미 사용되었습니다.',403);}
+        catch(error:any){
+          if(error.name==='TransactionCanceledException'&&error.CancellationReasons?.[0]?.Code==='ConditionalCheckFailed')throw bad('튜터 초대코드가 유효하지 않거나 이미 사용되었습니다.',403);
+          throw error;
+        }
         return json(201,{ok:true,workspaceId:id});
       }
       const prior=data<Member>(await get(`MEMBER#${email}`));
