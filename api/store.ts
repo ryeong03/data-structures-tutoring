@@ -44,6 +44,15 @@ export async function joinWithCode(member:Item,codeHash:string):Promise<void>{
     {Put:{TableName,Item:{pk:`ACCOUNT#${member.data.email}`,sk:`WS#${workspaceId()}`,data:{workspaceId:workspaceId()}}}}
   ]}));
 }
+export async function redeemTutorInvite(codeHash:string,email:string,workspace:Item,tutor:Item,at:string):Promise<void>{
+  const id=String(workspace.data.id);
+  await client.send(new TransactWriteCommand({TransactItems:[
+    {Update:{TableName,Key:{pk:`TUTORINVITE#${codeHash}`,sk:'META'},UpdateExpression:'SET usedAt = :at',ConditionExpression:'attribute_exists(pk) AND attribute_not_exists(usedAt) AND expiresAt > :at',ExpressionAttributeValues:{':at':at}}},
+    {Put:{TableName,Item:workspace,ConditionExpression:'attribute_not_exists(pk)'}},
+    {Put:{TableName,Item:{...tutor,pk:physicalKey(tutor.pk,id)},ConditionExpression:'attribute_not_exists(pk)'}},
+    {Put:{TableName,Item:{pk:`ACCOUNT#${email}`,sk:`WS#${id}`,data:{workspaceId:id}},ConditionExpression:'attribute_not_exists(pk)'}}
+  ]}));
+}
 export async function removeJoinedMember(email:string,memberId:string,affectedWeeks:Array<{id:number;report?:Item}>):Promise<void>{
   const transactions:any[]=[
     {Delete:{TableName,Key:{pk:physicalKey(`MEMBER#${email}`),sk:'META'},ConditionExpression:'#data.#id = :memberId',ExpressionAttributeNames:{'#data':'data','#id':'id'},ExpressionAttributeValues:{':memberId':memberId}}},
@@ -71,7 +80,7 @@ export async function all():Promise<Item[]>{
   return rowsForWorkspace(await allGlobal(),workspaceId());
 }
 export function rowsForWorkspace(rows:Item[],id:string):Item[]{
-  if(id===DEFAULT_WORKSPACE)return rows.filter(row=>!row.pk.startsWith('WS#')&&!row.pk.startsWith('WORKSPACE#')&&!row.pk.startsWith('ACCOUNT#'));
+  if(id===DEFAULT_WORKSPACE)return rows.filter(row=>!row.pk.startsWith('WS#')&&!row.pk.startsWith('WORKSPACE#')&&!row.pk.startsWith('ACCOUNT#')&&!row.pk.startsWith('TUTORINVITE#'));
   const prefix=`WS#${id}#`;
   return rows.filter(row=>row.pk.startsWith(prefix)).map(row=>logicalItem(row,id));
 }

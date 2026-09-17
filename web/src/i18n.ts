@@ -4,6 +4,13 @@ export type Language='ko'|'en'|'ru'|'kk';
 export const locale=()=>({ko:'ko-KR',en:'en-US',ru:'ru-RU',kk:'kk-KZ'}[document.documentElement.lang]||'ko-KR');
 
 const en:Record<string,string>={
+  '초대코드로 시작해요':'Start with an invite code','초대코드':'Invite code','초대받은 코드':'Your invite code',
+  'Google 로그인은 완료됐어요. 받은 초대코드를 입력해 주세요. 튜터 초대코드라면 수업 공간을 만들 수 있습니다.':'Google sign-in is complete. Enter your invite code. A tutor code lets you create a classroom.',
+  '목록 새로고침':'Refresh list','튜터 초대':'Invite a tutor','튜터 초대코드 발급':'Create tutor invite code',
+  '이메일을 미리 받을 필요 없이 초대코드를 전달하세요. 튜터가 Google 로그인 후 이름과 수업 이름을 직접 입력합니다.':'Share an invite code without collecting an email. The tutor signs in with Google and enters their name and classroom name.',
+  '한 번만 사용할 수 있고 ':'Single use; valid until ','까지 유효합니다. 코드는 다시 표시되지 않으니 지금 전달해 주세요.':'. The code will not be shown again, so share it now.',
+  '튜터 초대코드를 발급했습니다.':'Tutor invite code created.','수업 목록을 새로 불러왔습니다.':'Classroom list refreshed.',
+  '퀴즈 초안 가져오기':'Import quiz draft',
   'HTML 템플릿으로 퀴즈 초안을 올려주세요.':'Upload a quiz draft using the HTML template.',
   '각자 사용하는 AI에서 문항을 만든 뒤 결과만 이곳에 붙여 넣으세요. API 키는 사이트에 입력하지 않습니다. PDF를 참고할 때는 AI 도구에 직접 첨부하세요.':'Create the questions in your own AI tool, then paste only the result here. Do not enter your API key on this site. Attach a PDF directly in your AI tool if needed.',
   '생성 프롬프트 복사':'Copy generation prompt','5문항 JSON 붙여 넣기':'Paste five-question JSON','JSON 초안 가져오기':'Import JSON draft','또는 HTML 파일':'or an HTML file',

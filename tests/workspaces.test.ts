@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { physicalKey, rowsForWorkspace, withWorkspace, workspaceId, type Item } from '../api/store.js';
+import { formatTutorInviteCode, isTutorInviteCode, normalizeInviteCode } from '../shared/invites.js';
+
+test('tutor invite codes are distinct from student codes',()=>{
+  const code=formatTutorInviteCode('A1B2C3D4E5F60123456789AB');
+  assert.equal(code,'T-A1B2-C3D4-E5F6-0123-4567-89AB');
+  assert.equal(normalizeInviteCode(code),'TA1B2C3D4E5F60123456789AB');
+  assert.equal(isTutorInviteCode(code),true);
+  assert.equal(isTutorInviteCode('A1B2-C3D4-E5F6-0123-4567-89AB'),false);
+  assert.equal(isTutorInviteCode('T-A1B2-C3D4-E5F6-0123-4567-89A'),false);
+});
 
 test('legacy classroom keys remain unchanged and new classrooms use separate keys',async()=>{
   assert.equal(physicalKey('WEEK#1'),'WEEK#1');
@@ -14,6 +24,7 @@ test('legacy classroom keys remain unchanged and new classrooms use separate key
     {pk:'WS#class-a#WEEK#1',sk:'META',data:{topic:'A'}},
     {pk:'WS#class-b#WEEK#1',sk:'META',data:{topic:'B'}},
     {pk:'WORKSPACE#class-a',sk:'META',data:{}},
+    {pk:'TUTORINVITE#hash',sk:'META',data:{}},
     {pk:'ACCOUNT#student@example.com',sk:'WS#class-a',data:{}}
   ];
   assert.deepEqual(rowsForWorkspace(rows,'default').map(row=>row.data.topic),['original']);

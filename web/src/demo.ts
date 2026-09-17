@@ -19,7 +19,7 @@ export const demoState=():State=>({workspace:demoWorkspace,workspaces:[demoWorks
 export async function demoApi(path:string,method='GET',data:any={}):Promise<any>{
   if(path==='/state')return demoState();
   if(path==='/admin/workspaces'&&method==='GET')return [demoWorkspace];
-  if(path==='/admin/workspaces'&&method==='POST')throw new Error('실제 Google 계정을 초대하려면 배포된 사이트에서 진행해 주세요.');
+  if(path==='/admin/tutor-invites'&&method==='POST')return {code:'T-DEAD-BEEF-0000-0000-0000-0000',expiresAt:new Date(Date.now()+7*24*60*60*1000).toISOString()};
   const file=path.match(/^\/materials\/demo-(\d+)\/url$/);if(file&&method==='GET')throw new Error('교수님 PDF는 실제 로그인 후에만 열 수 있습니다.');
   if(path==='/config'&&method==='PUT'){zoomUrl=data.zoomUrl;return {ok:true};}
   if(path==='/invite-code'&&method==='POST'){inviteActive=true;return {code:'A1B2-C3D4-E5F6-1234-5678-9ABC'};}

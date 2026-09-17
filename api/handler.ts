@@ -3,11 +3,12 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { zipSync, strToU8 } from 'fflate';
-import { all, allGlobal, get, getGlobal, put, putGlobal, remove, queryGlobal, withWorkspace, workspaceId, DEFAULT_WORKSPACE, joinWithCode, removeJoinedMember, type Item } from './store.js';
+import { all, allGlobal, get, getGlobal, put, putGlobal, remove, queryGlobal, withWorkspace, workspaceId, DEFAULT_WORKSPACE, joinWithCode, redeemTutorInvite, removeJoinedMember, type Item } from './store.js';
 import { sendTutorTelegram } from './telegram.js';
 import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type Notice, type Rsvp } from '../shared/domain.js';
 import { isPdfHeader, noticePdfKey, validPdfUpload } from './notice-attachment.js';
 import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRsvp } from '../shared/access.js';
+import { normalizeInviteCode, isTutorInviteCode, formatTutorInviteCode } from '../shared/invites.js';
 
 const s3=new S3Client({});
 const bucket=process.env.FILE_BUCKET||'';
@@ -34,7 +35,7 @@ const must=(member:Member,roles:Member['role'][] )=>{if(!roles.includes(member.r
 const data=<T>(item:Item|undefined):T|undefined=>item?.data as T|undefined;
 const item=(pk:string,value:unknown,sk='META'):Item=>({pk,sk,data:value});
 const membersFrom=(rows:Item[]):Member[]=>rows.filter(x=>x.pk.startsWith('MEMBER#')&&x.data?.active).map(x=>x.data as Member);
-const codeHash=(code:string)=>createHash('sha256').update(code.replace(/[\s-]/g,'').toUpperCase()).digest('hex');
+const codeHash=(code:string)=>createHash('sha256').update(normalizeInviteCode(code)).digest('hex');
 function googleIdentity(event:APIGatewayProxyEventV2){
   const claims=(event.requestContext as any).authorizer?.jwt?.claims||{};
   const email=String(claims.email||'').trim().toLowerCase();
@@ -124,10 +125,18 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
     if(method==='POST'&&path==='/join'){
       const {email}=googleIdentity(event),b=bodyOf(event);
       if(email===ownerEmail)throw bad('튜터 계정은 가입코드가 필요하지 않습니다.');
+      const code=normalizeInviteCode(txt(b.code,60));
+      if(isTutorInviteCode(code)){
+        const tutorName=txt(b.name,80),name=txt(b.classroomName,100),id=randomUUID(),at=now();
+        const workspace:Workspace={id,name,tutorEmail:email,tutorName,createdAt:at,active:true};
+        const tutor:Member={id:randomUUID(),email,name:tutorName,role:'tutor',active:true,createdAt:at};
+        try{await redeemTutorInvite(codeHash(code),email,item(`WORKSPACE#${id}`,workspace),item(`MEMBER#${email}`,tutor),at);}
+        catch{throw bad('튜터 초대코드가 유효하지 않거나 이미 사용되었습니다.',403);}
+        return json(201,{ok:true,workspaceId:id});
+      }
       const prior=data<Member>(await get(`MEMBER#${email}`));
       if(prior?.active)return json(200,{ok:true,workspaceId:workspaceId()});
       if(prior)throw bad('이 계정은 접근이 중지되었습니다.',403);
-      const code=txt(b.code,60).replace(/[\s-]/g,'').toUpperCase();
       if(!/^[A-F0-9]{24}$/.test(code))throw bad('가입코드를 확인해 주세요.',403);
       const member:Member={id:randomUUID(),email,name:txt(b.name,80),role:'student',active:true,createdAt:now()};
       try{await joinWithCode(item(`MEMBER#${email}`,member),codeHash(code));}catch{throw bad('가입코드가 다르거나 가입 가능한 인원이 모두 찼습니다.',403);}
@@ -138,19 +147,14 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
     if(path==='/admin/workspaces'&&method==='GET'){
       if(me.email!==ownerEmail)throw bad('권한이 없습니다.',403);
       const registry=await workspaceList(),rows=await allGlobal();
-      return json(200,registry.map(w=>{const prefix=w.id===DEFAULT_WORKSPACE?'':`WS#${w.id}#`;const scoped=rows.filter(row=>w.id===DEFAULT_WORKSPACE?!row.pk.startsWith('WS#')&&!row.pk.startsWith('ACCOUNT#')&&!row.pk.startsWith('WORKSPACE#'):row.pk.startsWith(prefix));return {...w,studentCount:scoped.filter(row=>row.pk.startsWith(prefix+'MEMBER#')&&row.data?.active&&row.data?.role!=='tutor').length,materialCount:scoped.filter(row=>row.pk.startsWith(prefix+'MATERIAL#')).length,publishedWeeks:scoped.filter(row=>row.pk.startsWith(prefix+'WEEK#')&&row.data?.published).length};}));
+      return json(200,registry.map(w=>{const prefix=w.id===DEFAULT_WORKSPACE?'':`WS#${w.id}#`;const scoped=rows.filter(row=>w.id===DEFAULT_WORKSPACE?!row.pk.startsWith('WS#')&&!row.pk.startsWith('ACCOUNT#')&&!row.pk.startsWith('WORKSPACE#'):row.pk.startsWith(prefix));return {...publicWorkspace(w),studentCount:scoped.filter(row=>row.pk.startsWith(prefix+'MEMBER#')&&row.data?.active&&row.data?.role!=='tutor').length,materialCount:scoped.filter(row=>row.pk.startsWith(prefix+'MATERIAL#')).length,publishedWeeks:scoped.filter(row=>row.pk.startsWith(prefix+'WEEK#')&&row.data?.published).length};}));
     }
-    if(path==='/admin/workspaces'&&method==='POST'){
+    if(path==='/admin/tutor-invites'&&method==='POST'){
       if(me.email!==ownerEmail)throw bad('권한이 없습니다.',403);
-      const b=bodyOf(event),name=txt(b.name,100),tutorName=txt(b.tutorName,80),tutorEmail=txt(b.tutorEmail,254).toLowerCase();
-      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tutorEmail))throw bad('튜터 이메일을 확인해 주세요.');
-      if(tutorEmail===ownerEmail)throw bad('운영자 계정은 이미 모든 수업에 접근할 수 있습니다.');
-      const existing=await accountWorkspaces(tutorEmail);if(existing.some(w=>w.tutorEmail===tutorEmail))throw bad('이미 등록된 튜터입니다.');
-      const id=randomUUID(),workspace:Workspace={id,name,tutorEmail,tutorName,createdAt:now(),active:true};
-      await putGlobal(item(`WORKSPACE#${id}`,workspace),true);
-      await withWorkspace(id,async()=>{const tutor:Member={id:randomUUID(),email:tutorEmail,name:tutorName,role:'tutor',active:true,createdAt:now()};await put(item(`MEMBER#${tutorEmail}`,tutor),true);await seed();});
-      await putGlobal(item(`ACCOUNT#${tutorEmail}`,{workspaceId:id},`WS#${id}`));
-      return json(201,workspace);
+      const code=formatTutorInviteCode(randomBytes(12).toString('hex').toUpperCase());
+      const expiresAt=new Date(Date.now()+7*24*60*60*1000).toISOString();
+      await putGlobal({...item(`TUTORINVITE#${codeHash(code)}`,{createdAt:now(),createdBy:me.email}),expiresAt},true);
+      return json(201,{code,expiresAt});
     }
     if(method==='GET'&&path==='/state')return json(200,await state(me));
     if(method==='GET'&&path==='/export'){
@@ -333,11 +337,12 @@ function auditAction(method:string,path:string){
   if(path==='/notices'||path.startsWith('/notices/'))return method==='DELETE'?'notice-delete':'notice';
   if(path.startsWith('/questions/'))return path.endsWith('/replies')?'reply':'question-update';
   if(path==='/questions')return 'question';
+  if(path==='/admin/tutor-invites')return 'tutor-invite';
   if(path.startsWith('/reports/'))return 'report';
   if(path.startsWith('/tutor-weeks/'))return 'tutor-note';
   if(path.includes('/attempts'))return 'quiz-attempt';
   if(path.includes('/generate'))return 'quiz-generate';
-  if(path.includes('/html'))return 'quiz-import';
+  if(path.includes('/html')||path.includes('/json'))return 'quiz-import';
   if(path.startsWith('/quizzes/'))return 'quiz-update';
   return '';
 }
@@ -355,7 +360,7 @@ async function resolveWorkspace(event:APIGatewayProxyEventV2):Promise<string>{
   const email=googleIdentity(event).email;
   const path=event.rawPath.replace(/^\/api/,'');
   if(path==='/join'){
-    const code=String(bodyOf(event).code||'').replace(/[\s-]/g,'').toUpperCase();
+    const code=normalizeInviteCode(String(bodyOf(event).code||''));
     if(!/^[A-F0-9]{24}$/.test(code))return DEFAULT_WORKSPACE;
     for(const w of await workspaceList()){
       const invite=await withWorkspace(w.id,()=>get('INVITE#CURRENT'));
@@ -363,6 +368,7 @@ async function resolveWorkspace(event:APIGatewayProxyEventV2):Promise<string>{
     }
     return DEFAULT_WORKSPACE;
   }
+  if(path.startsWith('/admin/'))return DEFAULT_WORKSPACE;
   const requested=String(event.headers?.['x-workspace-id']||'').trim();
   const allowed=await accountWorkspaces(email);
   if(requested){if(!allowed.some(w=>w.id===requested))throw bad('이 수업에 접근할 수 없습니다.',403);return requested;}
