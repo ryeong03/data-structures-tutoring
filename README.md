@@ -43,7 +43,7 @@ flowchart TB
 
 매주 튜티 4~5명이 그 주에 배운 내용을 파트별로 5~10분씩 설명합니다. 각 설명 뒤 튜터가 핵심을 정리하고 마지막 약 10분은 질문에 답합니다. 이 흐름은 운영계획에서 확인할 수 있습니다.
 
-홈은 10개 돌로 구성된 탐험 지도입니다. 돌을 누르면 해당 주차의 일정과 자료를 확인할 수 있고, 지도 안의 나무 게시판을 누르면 공지사항이 팝업으로 열립니다. [이화사이버캠퍼스](https://cyber.ewha.ac.kr/) 바로가기도 지도 위에 있습니다. 지도 배경은 [Kitbitz Nature Kit](https://kitbitz.art/kits/nature-kit)의 [공식 월드 이미지](https://kitbitz.art/world-previews/nature.webp), 돌은 [Kitbitz의 CC0 에셋](https://github.com/CaptExcellent/kits-library-assets)을 사용합니다.
+홈은 10개 돌로 구성된 탐험 지도입니다. 돌을 누르면 해당 주차의 일정과 자료를 확인할 수 있고, 지도 안의 나무 게시판을 누르면 공지사항이 팝업으로 열립니다. 튜터는 공지에 10MB 이하 PDF를 첨부할 수 있고, 로그인한 팀원은 게시판에서 PDF 뷰어로 바로 열 수 있습니다. 공지 PDF는 수업별 비공개 S3에 저장되며, 열 때마다 서버가 수업 접근 권한을 확인합니다. [이화사이버캠퍼스](https://cyber.ewha.ac.kr/) 바로가기도 지도 위에 있습니다. 지도 배경은 [Kitbitz Nature Kit](https://kitbitz.art/kits/nature-kit)의 [공식 월드 이미지](https://kitbitz.art/world-previews/nature.webp), 돌은 [Kitbitz의 CC0 에셋](https://github.com/CaptExcellent/kits-library-assets)을 사용합니다.
 
 제목에는 배달의민족 **주아체**, 본문에는 **한나체 Air**를 적용했습니다. 두 글꼴의 저작권과 사용 조건은 [우아한형제들 글꼴 안내](https://www.woowahan.com/fonts)와 [라이선스](https://www.woowahan.com/fonts/license)에 따릅니다. 함께 배포하는 라이선스 사본은 [LICENSE.txt](web/public/fonts/LICENSE.txt)에 있습니다.
 
@@ -111,4 +111,4 @@ npm run deploy
 
 월 AWS 비용 예산은 50 USD이며 실제 지출 10 USD와 50 USD에 이메일 알림을 보냅니다. 예산은 사용을 자동 중지하지 않습니다. Claude 퀴즈 생성은 Bedrock 사용량으로 과금되며, 성공적으로 생성한 초안의 토큰 사용량은 튜터 화면에 기록됩니다.
 
-자료 버킷은 공개 접근을 차단합니다. PDF는 로그인·권한 확인 뒤 60초 유효한 링크로 받습니다. DynamoDB의 시점 복구가 켜져 있습니다. 사이트와 자료 버킷, 데이터베이스는 스택 삭제 시 보존하도록 설정했습니다.
+자료 버킷은 공개 접근을 차단합니다. 주차 자료 PDF는 로그인·권한 확인 뒤 60초 유효한 링크로, 공지 PDF는 권한 확인 뒤 5분 유효한 뷰어 링크로 제공합니다. DynamoDB의 시점 복구가 켜져 있습니다. 사이트와 자료 버킷, 데이터베이스는 스택 삭제 시 보존하도록 설정했습니다.

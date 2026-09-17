@@ -31,7 +31,7 @@ async function api(path:string,method='GET',body?:unknown){
   if(previewMode&&method!=='GET')throw new Error('튜티 화면 미리보기에서는 저장할 수 없습니다.');
   if(import.meta.env.DEV&&import.meta.env.VITE_DEMO==='1')return demoApi(path,method,body);
   const token=(await fetchAuthSession()).tokens?.idToken?.toString();
-  const response=await fetch('/api'+path,{method,headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{'x-workspace-id':localStorage.getItem('tutoring-workspace')||''})},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});
+  const response=await fetch('/api'+path,{method,headers:{'content-type':'application/json','x-workspace-id':localStorage.getItem('tutoring-workspace')||'',...(token?{authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(data.error||`요청 실패 (${response.status})`);
   return data;
@@ -113,11 +113,22 @@ function Home({state,run,busy,onOpenWeek,onOpenZoom}:Props){
   const [selectedId,setSelectedId]=useState<number|null>(null);
   const [noticeTitle,setNoticeTitle]=useState('');
   const [noticeBody,setNoticeBody]=useState('');
+  const [noticeFile,setNoticeFile]=useState<File|null>(null);
+  const [pdfViewer,setPdfViewer]=useState<{url:string;name:string}|null>(null);
+  const [pdfLoading,setPdfLoading]=useState<string|null>(null);
+  const [pdfError,setPdfError]=useState('');
   const week=state.weeks.find(w=>w.id===selectedId);
   const current=currentWeek(state.weeks);
   const responseCount=state.rsvps.filter(r=>r.weekId===current?.id).length;
   const tutor=state.me.role==='tutor';
-  useEffect(()=>{if(!open)return;const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')setOpen(false);};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[open]);
+  useEffect(()=>{if(!open)return;const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){if(pdfViewer)setPdfViewer(null);else setOpen(false);}};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[open,pdfViewer]);
+  const openNoticePdf=async(notice:Notice)=>{
+    if(!notice.attachment)return;
+    setPdfError('');setPdfLoading(notice.id);
+    try{const result=await api(`/notices/${encodeURIComponent(notice.id)}/attachment-url`);setPdfViewer({url:result.url,name:notice.attachment.name});}
+    catch(error){setPdfError(error instanceof Error?error.message:String(error));}
+    finally{setPdfLoading(null);}
+  };
   const show=(id:number|null)=>{setSelectedId(id);setOpen(true);};
   return <div className="home-map">
     <div className="map-top-actions"><span className="schedule-note"><strong>화요일 11:00 ~ 11:50</strong><span>장소는 전날 웹 공지</span><span className="break-note">10/20 시험기간 휴강</span></span><div><button className="button outline" onClick={onOpenZoom}>{state.workspace?.id==="default"?"첫 미팅 · Zoom":"Zoom 모임"}</button><button className="button outline" onClick={()=>show(current?.id||null)}>다음 튜터링 참석 여부{state.me.role==='tutor'?` (${responseCount})`:''}</button><a className="button subtle" href="https://cyber.ewha.ac.kr/" target="_blank" rel="noreferrer">이화사이버캠퍼스 ↗</a></div></div>
@@ -126,9 +137,39 @@ function Home({state,run,busy,onOpenWeek,onOpenZoom}:Props){
       {week&&<div className="drawer-summary"><span>{dateLabel(week.date)} · {week.time} · {week.location} · {week.duration}분</span><strong>보고서 담당: {person(state,week.reportMemberId)} · {week.progressPage?`${week.progressPage}페이지까지`:'진도 기록 전'}</strong><p>{week.concepts}</p><button className="button primary" onClick={()=>{setOpen(false);onOpenWeek?.(week.id);}}>이 주차 자료 보기 ↗</button></div>}
       {week?.published&&<RsvpPanel state={state} week={week} run={run} busy={busy}/>}
       {selectedId===4&&<div className="exam-note">10월 20일은 시험기간 휴강 · 다음 튜터링은 10월 27일</div>}
-      <div className="drawer-section"><div className="section-head"><div><span className="eyebrow">ANNOUNCEMENTS</span><h3>공지사항</h3></div><span className="count">{state.notices.length}</span></div>{tutor&&<form className="notice-form" onSubmit={event=>{event.preventDefault();void run(async()=>{await api('/notices','POST',{title:noticeTitle,body:noticeBody});setNoticeTitle('');setNoticeBody('');},'공지를 게시했습니다.');}}><input value={noticeTitle} onChange={event=>setNoticeTitle(event.target.value)} placeholder="공지 제목" required/><textarea value={noticeBody} onChange={event=>setNoticeBody(event.target.value)} placeholder="팀원에게 알릴 내용을 적어주세요" required rows={2}/><button className="button primary" disabled={busy}>공지 올리기</button></form>}{state.notices.length?state.notices.map(notice=><article className="notice" key={notice.id}><div><strong>{notice.title}</strong><small>{new Date(notice.createdAt).toLocaleDateString(locale())}</small></div><p>{notice.body}</p>{tutor&&<button className="text-button danger" onClick={()=>void run(()=>api(`/notices/${notice.id}`,'DELETE'),'공지를 삭제했습니다.')}>삭제</button>}</article>):<Empty text="아직 공지가 없습니다."/>}</div>
+      <div className="drawer-section">
+        <div className="section-head"><div><span className="eyebrow">ANNOUNCEMENTS</span><h3>공지사항</h3></div><span className="count">{state.notices.length}</span></div>
+        {tutor&&<form className="notice-form" onSubmit={event=>{
+          event.preventDefault();const form=event.currentTarget;
+          void run(async()=>{
+            let attachmentId:string|undefined;
+            if(noticeFile){
+              if(!noticeFile.name.toLowerCase().endsWith('.pdf')||noticeFile.size<1||noticeFile.size>10_000_000||await noticeFile.slice(0,5).text()!=='%PDF-')throw new Error('10MB 이하 PDF 파일을 선택해 주세요.');
+              const prepared=await api('/notice-attachments/upload-url','POST',{name:noticeFile.name,size:noticeFile.size});
+              const uploaded=await fetch(prepared.url,{method:'PUT',headers:{'content-type':'application/pdf'},body:noticeFile});
+              if(!uploaded.ok)throw new Error('PDF 업로드에 실패했습니다.');
+              attachmentId=prepared.attachmentId;
+            }
+            await api('/notices','POST',{title:noticeTitle,body:noticeBody,...(attachmentId?{attachmentId,attachmentName:noticeFile!.name}:{})});
+            setNoticeTitle('');setNoticeBody('');setNoticeFile(null);form.reset();
+          },'공지를 게시했습니다.');
+        }}>
+          <input value={noticeTitle} onChange={event=>setNoticeTitle(event.target.value)} placeholder="공지 제목" required/>
+          <textarea value={noticeBody} onChange={event=>setNoticeBody(event.target.value)} placeholder="팀원에게 알릴 내용을 적어주세요" required rows={2}/>
+          <label className="notice-file-label">PDF 첨부 (선택)<input type="file" accept=".pdf,application/pdf" onChange={event=>setNoticeFile(event.target.files?.[0]||null)}/></label>
+          <button className="button primary" disabled={busy}>{busy?'올리는 중…':'공지 올리기'}</button>
+        </form>}
+        {pdfError&&<p className="notice-pdf-error" role="alert">{pdfError}</p>}
+        {state.notices.length?state.notices.map(notice=><article className="notice" key={notice.id}>
+          <div><strong>{notice.title}</strong><small>{new Date(notice.createdAt).toLocaleDateString(locale())}</small></div>
+          <p>{notice.body}</p>
+          {notice.attachment&&<button className="notice-attachment" type="button" disabled={pdfLoading===notice.id} onClick={()=>void openNoticePdf(notice)}><span className="pdf-icon">PDF</span><span><strong>{notice.attachment.name}</strong><small>{(notice.attachment.size/1024/1024).toFixed(1)}MB · <span>{pdfLoading===notice.id?'여는 중…':'사이트에서 보기'}</span></small></span><span aria-hidden="true">↗</span></button>}
+          {tutor&&<button className="text-button danger" onClick={()=>void run(()=>api(`/notices/${notice.id}`,'DELETE'),'공지를 삭제했습니다.')}>삭제</button>}
+        </article>):<Empty text="아직 공지가 없습니다."/>}
+      </div>
       <div className="drawer-links">{state.config.zoomUrl&&<a className="button outline" href={state.config.zoomUrl} target="_blank" rel="noreferrer">Zoom 회의실 ↗</a>}<a className="button outline" href="https://cyber.ewha.ac.kr/" target="_blank" rel="noreferrer">사이버캠퍼스 ↗</a></div>
     </section></div>}
+    {pdfViewer&&<div className="notice-pdf-backdrop" onClick={()=>setPdfViewer(null)}><section className="notice-pdf-modal" role="dialog" aria-modal="true" aria-label={pdfViewer.name} onClick={event=>event.stopPropagation()}><header><div><span className="pdf-icon">PDF</span><strong>{pdfViewer.name}</strong></div><button className="drawer-close" type="button" aria-label="닫기" onClick={()=>setPdfViewer(null)}>×</button></header><iframe src={pdfViewer.url} title={pdfViewer.name}/><footer><a className="button outline" href={pdfViewer.url} target="_blank" rel="noreferrer">새 탭에서 열기 ↗</a></footer></section></div>}
   </div>;
 }
 

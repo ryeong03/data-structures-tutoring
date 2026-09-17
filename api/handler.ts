@@ -1,12 +1,13 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
-import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, ConverseCommand, type ContentBlock } from '@aws-sdk/client-bedrock-runtime';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { zipSync, strToU8 } from 'fflate';
 import { all, allGlobal, get, getGlobal, put, putGlobal, remove, queryGlobal, withWorkspace, workspaceId, DEFAULT_WORKSPACE, joinWithCode, removeJoinedMember, type Item } from './store.js';
 import { sendTutorTelegram } from './telegram.js';
-import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type Rsvp } from '../shared/domain.js';
+import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type Notice, type Rsvp } from '../shared/domain.js';
+import { isPdfHeader, noticePdfKey, validPdfUpload } from './notice-attachment.js';
 import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRsvp } from '../shared/access.js';
 
 const s3=new S3Client({});const bedrock=new BedrockRuntimeClient({});
@@ -109,6 +110,14 @@ async function materialUrl(id:string,me:Member){
   const week=data<Week>(await get(`WEEK#${material.weekId}`));if(!week||!canViewWeek(me,week))throw bad('자료를 찾지 못했습니다.',404);
   return {url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:material.key,ResponseContentDisposition:`attachment; filename*=UTF-8''${encodeURIComponent(material.name)}`}),{expiresIn:60})};
 }
+async function noticeAttachmentUrl(id:string){
+  const notice=data<Notice>(await get(`NOTICE#${id}`));
+  if(!notice?.attachment)throw bad('공지 첨부파일을 찾지 못했습니다.',404);
+  return {url:await getSignedUrl(s3,new GetObjectCommand({
+    Bucket:bucket,Key:noticePdfKey(workspaceId(),notice.attachment.id),
+    ResponseContentType:'application/pdf',ResponseContentDisposition:'inline'
+  }),{expiresIn:300})};
+}
 const quizModel='global.anthropic.claude-sonnet-4-6';
 async function generateQuiz(week:Week,material:Material|undefined,concepts:string){
   const content:ContentBlock[]=[];
@@ -166,6 +175,7 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
     if(method==='GET'&&path==='/export'){
       must(me,['tutor']);const rows=await all();const files:Record<string,Uint8Array>={'records.json':strToU8(JSON.stringify(rows.filter(x=>!x.pk.startsWith('EXPORT#')),null,2))};
       for(const m of rows.filter(x=>x.pk.startsWith('MATERIAL#'))){const material=m.data as Material;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:material.key}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`materials/${material.id}-${material.name.replace(/[^\w.가-힣-]/g,'_')}`]=bytes;}
+      for(const n of rows.filter(x=>x.pk.startsWith('NOTICE#'))){const notice=n.data as Notice;if(!notice.attachment)continue;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:noticePdfKey(workspaceId(),notice.attachment.id)}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`notice-attachments/${notice.id}-${notice.attachment.name.replace(/[^\w.가-힣-]/g,'_')}`]=bytes;}
       const key=`exports/${randomUUID()}.zip`;await s3.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:zipSync(files,{level:0}),ContentType:'application/zip'}));
       return json(200,{url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:key}),{expiresIn:300})});
     }
@@ -247,10 +257,34 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       await put(item(`MATERIAL#${id}`,material),true);return json(201,material);
     }
     if((match=path.match(/^\/materials\/([^/]+)\/url$/))&&method==='GET')return json(200,await materialUrl(match[1],me));
-    if(method==='POST'&&path==='/notices'){
-      must(me,['tutor']);const notice={id:randomUUID(),title:txt(b.title,160),body:txt(b.body,5000),pinned:!!b.pinned,createdAt:now()};await put(item(`NOTICE#${notice.id}`,notice));return json(201,notice);
+    if(method==='POST'&&path==='/notice-attachments/upload-url'){
+      must(me,['tutor']);const name=txt(b.name,180),size=Number(b.size);
+      if(!validPdfUpload(name,size))throw bad('10MB 이하 PDF만 올릴 수 있습니다.');
+      const attachmentId=randomUUID(),key=noticePdfKey(workspaceId(),attachmentId);
+      const url=await getSignedUrl(s3,new PutObjectCommand({Bucket:bucket,Key:key,ContentType:'application/pdf'}),{expiresIn:300});
+      return json(200,{url,attachmentId});
     }
-    if((match=path.match(/^\/notices\/([^/]+)$/))&&method==='DELETE'){must(me,['tutor']);await remove(`NOTICE#${match[1]}`);return json(200,{ok:true});}
+    if(method==='POST'&&path==='/notices'){
+      must(me,['tutor']);
+      let attachment:Notice['attachment'];
+      if(b.attachmentId){
+        const id=txt(b.attachmentId,100),name=txt(b.attachmentName,180),key=validate(()=>noticePdfKey(workspaceId(),id));
+        const object=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:key})).catch(()=>{throw bad('업로드된 PDF를 찾지 못했습니다.');});
+        if(!object.ContentLength||!validPdfUpload(name,object.ContentLength)||object.ContentType!=='application/pdf')throw bad('PDF 파일을 확인해 주세요.');
+        const signature=await s3.send(new GetObjectCommand({Bucket:bucket,Key:key,Range:'bytes=0-4'}));
+        if(!isPdfHeader(await signature.Body?.transformToByteArray()))throw bad('PDF 파일 형식을 확인해 주세요.');
+        attachment={id,name,size:object.ContentLength};
+      }
+      const notice:Notice={id:randomUUID(),title:txt(b.title,160),body:txt(b.body,5000),pinned:!!b.pinned,createdAt:now(),...(attachment?{attachment}:{})};
+      await put(item(`NOTICE#${notice.id}`,notice));return json(201,notice);
+    }
+    if((match=path.match(/^\/notices\/([^/]+)\/attachment-url$/))&&method==='GET')return json(200,await noticeAttachmentUrl(match[1]));
+    if((match=path.match(/^\/notices\/([^/]+)$/))&&method==='DELETE'){
+      must(me,['tutor']);const notice=data<Notice>(await get(`NOTICE#${match[1]}`));
+      await remove(`NOTICE#${match[1]}`);
+      if(notice?.attachment)await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:noticePdfKey(workspaceId(),notice.attachment.id)}));
+      return json(200,{ok:true});
+    }
     if(method==='POST'&&path==='/questions'){
       const question:Question={id:randomUUID(),title:txt(b.title,180),body:txt(b.body,5000),authorId:me.id,createdAt:now(),resolved:false,replies:[]};await put(item(`QUESTION#${question.id}`,question));return json(201,question);
     }
