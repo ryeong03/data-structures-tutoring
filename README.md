@@ -6,6 +6,39 @@ Site: https://d1nhri0xudbp4k.cloudfront.net/
 
 여러 튜터가 각자 수업 공간을 만들고, 공간마다 튜티 최대 5명이 쓰는 자료구조 튜터링 웹사이트입니다. React·TypeScript 화면, Cognito Google 로그인, API Gateway·Lambda, DynamoDB, 비공개 S3 자료 저장소, CloudFront를 AWS CDK로 배포합니다.
 
+## 서비스 미리 보기
+
+실제 수업 공간은 가입한 팀원만 열 수 있어, 아래 화면은 **샘플 데이터**로 촬영했습니다. 학생 정보와 교수님 자료는 포함하지 않았습니다.
+
+![탐험 지도에서 공지와 PDF를 열고, 주차 자료·보고서·퀴즈를 확인하는 사용 흐름](docs/media/walkthrough.gif)
+
+지도에서 주차 선택 → 게시판에서 공지와 PDF 확인 → 주차 자료 열람 → 보고서 작성 → 개념 퀴즈 풀이
+
+| 탐험 지도 | 공지 게시판 | 모바일 화면 |
+| :---: | :---: | :---: |
+| [![10주 탐험 지도](docs/media/adventure-map.png)](docs/media/adventure-map.png) | [![공지 게시판](docs/media/notice-board.png)](docs/media/notice-board.png) | [![모바일 탐험 지도](docs/media/mobile-map.png)](docs/media/mobile-map.png) |
+
+<details>
+<summary>PDF 뷰어·주차 자료·보고서·퀴즈 화면 보기</summary>
+
+### 공지 PDF 뷰어
+
+![공지에서 샘플 PDF를 여는 화면](docs/media/pdf-viewer.png)
+
+### 주차별 자료
+
+![주차별 자료 화면](docs/media/weekly-materials.png)
+
+### 학습 보고서
+
+![학습 보고서 화면](docs/media/weekly-report.png)
+
+### 개념 퀴즈
+
+![개념 퀴즈 화면](docs/media/concept-quiz.png)
+
+</details>
+
 ## 우리 서비스의 구조
 
 ```mermaid
@@ -107,7 +140,7 @@ npm run deploy
 
 출석, 세션 메모, 제출 현황, AI 사용 기록, 활동 로그, 전체 기록 ZIP 다운로드는 튜터에게만 제공됩니다. 튜터는 튜티 화면 미리보기를 사용할 수 있습니다. 사용 중인 계정이 비활성화되면 서버가 매 요청마다 접근을 차단합니다.
 
-## 비용과 비밀
+## 운영 비용과 자료 접근
 
 월 AWS 비용 예산은 50 USD이며 실제 지출 10 USD와 50 USD에 이메일 알림을 보냅니다. 예산은 사용을 자동 중지하지 않습니다. Claude 퀴즈 생성은 Bedrock 사용량으로 과금되며, 성공적으로 생성한 초안의 토큰 사용량은 튜터 화면에 기록됩니다.
 
