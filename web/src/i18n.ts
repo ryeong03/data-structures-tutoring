@@ -28,7 +28,7 @@ const en:Record<string,string>={
   '9월 17일(목) 18:30에 Zoom으로 첫 미팅을 진행합니다. 서로 소개하고 튜터링 방식과 일정을 안내할게요. Zoom 링크는 「Zoom 모임」 탭에서 확인해 주세요.\n\n정규 튜터링은 화요일 11:00~11:50에 진행합니다. 장소는 공간 대여 현황에 따라 정하고, 모임 전날 이 웹사이트에 공지하겠습니다. 일부 모임은 비대면으로 진행할 수 있습니다.':'Our first Zoom meeting is Thursday, Sep 17 at 18:30. We will introduce ourselves and explain how tutoring and the schedule will work. Find the link in the Zoom Meeting tab.\n\nRegular sessions are Tuesdays from 11:00 to 11:50. The venue depends on room availability and will be posted on this website the day before. Some sessions may be online.',
   '분':'min',
   'FIELD GUIDE · 2026 2학기':'FIELD GUIDE · 2026 Semester 2','FIRST MEETING · 2026 2학기':'FIRST MEETING · 2026 Semester 2',
-  '보고서 담당:':'Report writer:','참석 어려움 · 사유 남기기':'Cannot attend · give a reason','참석이 어려운 사유':'Reason you cannot attend','사유와 함께 제출':'Submit with reason','사유:':'Reason:','일정이 겹치거나 참석이 어려운 이유를 적어주세요.':'Tell us why you cannot attend.','주차 학습 보고서':'weekly learning report','공개된 주차':'Published weeks','/ 10 · 일정과 주제는 튜터가 확인한 뒤 공개합니다.':'/ 10 · Dates and topics appear after the tutor reviews them.','무엇이 궁금한가요?':'What would you like to ask?','어디에서 막혔는지, 시도해 본 방법이 있다면 함께 적어주세요.':'Where did you get stuck? What have you tried?','세령 튜터와 함께!':'Let’s go with the tutor!',
+  '보고서 담당:':'Report writer:','참석 어려움 · 사유 남기기':'Cannot attend · give a reason','참석이 어려운 사유':'Reason you cannot attend','사유와 함께 제출':'Submit with reason','사유:':'Reason:','일정이 겹치거나 참석이 어려운 이유를 적어주세요.':'Tell us why you cannot attend.','주차 학습 보고서':'weekly learning report','공개된 주차':'Published weeks','/ 10 · 일정과 주제는 튜터가 확인한 뒤 공개합니다.':'/ 10 · Dates and topics appear after the tutor reviews them.','무엇이 궁금한가요?':'What would you like to ask?','어디에서 막혔는지, 시도해 본 방법이 있다면 함께 적어주세요.':'Where did you get stuck? What have you tried?',
   '자료구조, 함께 배워요.':'Learn data structures together.','매주 배운 내용을 서로 설명하고, 질문하며, 한 주씩 나아가요.':'Each week, we explain what we learned, ask questions, and move forward together.',
   '자료구조 튜터링':'Data Structures Tutoring','자료구조 탐험 지도':'Data Structures Adventure Map','2026 · 2학기':'2026 · Semester 2','2026 2학기 · 10주':'2026 Semester 2 · 10 weeks','2026 2학기':'2026 Semester 2',
   '홈':'Home','로그아웃':'Log out','메뉴':'Menu','닫기':'Close','주요 메뉴':'Main navigation','공지사항 보기 ↗':'View announcements ↗','지도를 옆으로 넘겨보세요 →':'Swipe the map sideways →','운영계획':'How We Learn','일정·자료':'Schedule & Materials','Zoom 모임':'Zoom Meeting','주별보고서':'Weekly Reports','질문방':'Questions','개념 퀴즈':'Concept Quiz','튜터 전용':'Tutor Only','활동 로그':'Activity Log','우리의 학습 공간':'Our learning space','로컬 미리보기':'Local Preview',
@@ -58,6 +58,13 @@ function translateText(value:string,language:Language){
   const [,before,body,after]=match;
   const dictionary=language==='ru'?ru:language==='kk'?kk:en;
   let translated=dictionary[body];
+  const guide=body.match(/^(.+) 튜터와 함께!$/);
+  if(guide){
+    const name=guide[1];
+    translated=language==='en'?`With tutor ${name}!`:language==='ru'?`С наставником ${name}!`:`Топ жетекшісімен бірге: ${name}`;
+  }else if(body==='튜터와 함께!'){
+    translated=language==='en'?'With your tutor!':language==='ru'?'Вместе с наставником!':'Топ жетекшісімен бірге!';
+  }
   if(!translated&&(language==='ru'||language==='kk')){
     const week=body.match(/^(\d+)주차(?: 학습 보고서| 참석 여부)?$/);
     if(week){

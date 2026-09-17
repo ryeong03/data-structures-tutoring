@@ -9,6 +9,7 @@ export function studentPreview(state:State,memberId:string):State|null{
   const tried=new Set(attempts.map(a=>a.weekId));
   const quizzes=state.quizzes.filter(q=>q.status==='published'&&visibleWeeks.has(q.weekId)).map(q=>tried.has(q.weekId)?q:{...q,items:q.items.map(({id,question,choices})=>({id,question,choices}))}) as State['quizzes'];
   return {
+    workspace:state.workspace&&{id:state.workspace.id,name:state.workspace.name,tutorName:state.workspace.tutorName,active:state.workspace.active},
     me:{id:member.id,name:member.name,role:member.role,email:'email' in member&&typeof member.email==='string'?member.email:undefined},
     members:state.members.filter(m=>!('active' in m)||m.active).map(({id,name,role})=>({id,name,role})),
     weeks,

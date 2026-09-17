@@ -7,6 +7,7 @@ import type { State } from '../web/src/state.js';
 test('student preview hides unpublished weeks, answers, other replies, and tutor records',()=>{
   const quiz:Quiz={weekId:1,title:'quiz',concepts:'',status:'published',source:'manual',updatedAt:'',items:Array.from({length:5},(_,i)=>({id:String(i),question:'Question',choices:['A','B','C','D'],answer:1,explanation:'Secret answer'}))};
   const state:State={
+    workspace:{id:'default',name:'자료구조 튜터링',tutorName:'박세령',tutorEmail:'tutor@example.com',active:true},
     me:{id:'tutor',name:'Tutor',email:'tutor@example.com',role:'tutor',active:true,createdAt:''},
     members:[{id:'tutor',name:'Tutor',email:'tutor@example.com',role:'tutor',active:true,createdAt:''},{id:'student',name:'Student',email:'student@example.com',role:'student',active:true,createdAt:''},{id:'other',name:'Other',email:'other@example.com',role:'student',active:true,createdAt:''}],
     weeks:[{...seedWeeks[0],published:true},seedWeeks[1]],notices:[],
@@ -22,6 +23,8 @@ test('student preview hides unpublished weeks, answers, other replies, and tutor
   assert.equal(preview.reports.length,0);
   assert.equal(preview.rsvps.length,1);
   assert.equal(preview.rsvps[0].reason,'My reason');
+  assert.equal(preview.workspace?.tutorName,'박세령');
+  assert.equal('tutorEmail' in preview.workspace!,false);
   assert.equal('email' in preview.members[0],false);
   assert.equal(preview.tutorWeeks,undefined);
   assert.equal(preview.activityLog,undefined);
