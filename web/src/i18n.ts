@@ -5,6 +5,8 @@ export const locale=()=>({ko:'ko-KR',en:'en-US',ru:'ru-RU',kk:'kk-KZ'}[document.
 
 const en:Record<string,string>={
   '10주 탐험':'10 WEEK JOURNEY',
+  '각 수업의 튜터와 가입코드를 받은 튜티 최대 5명이 이용할 수 있습니다.':'Each class is for its tutor and up to five students with a join code.',
+  '전체 수업 관리':'All classrooms','수업 공간':'Classrooms','튜터 수업 추가':'Add tutor classroom','수업 공간 만들기':'Create classroom','수업 열기 ↗':'Open classroom ↗','튜터 이름':'Tutor name','튜터 Google 이메일':'Tutor Google email','수업 이름':'Classroom name','온라인 모임':'Online meeting','튜터가 Zoom 링크를 등록하면 이곳에서 바로 입장할 수 있어요.':'Join here once the tutor adds a Zoom link.',
   '화요일 11:00 ~ 11:50':'Tuesday 11:00–11:50','장소는 전날 웹 공지':'Venue posted here the day before',
   '화요일 11:00 · 장소는 전날 웹 공지':'Tuesday 11:00 · venue posted here the day before',
   '화요일 11:00–11:50 · 장소는 전날 웹 공지':'Tuesday 11:00–11:50 · venue posted here the day before',

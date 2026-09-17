@@ -4,7 +4,7 @@ import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from 
 import { BedrockRuntimeClient, ConverseCommand, type ContentBlock } from '@aws-sdk/client-bedrock-runtime';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { zipSync, strToU8 } from 'fflate';
-import { all, get, put, remove, joinWithCode, removeJoinedMember, type Item } from './store.js';
+import { all, allGlobal, get, getGlobal, put, putGlobal, remove, queryGlobal, withWorkspace, workspaceId, DEFAULT_WORKSPACE, joinWithCode, removeJoinedMember, type Item } from './store.js';
 import { sendTutorTelegram } from './telegram.js';
 import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type Rsvp } from '../shared/domain.js';
 import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRsvp } from '../shared/access.js';
@@ -12,6 +12,11 @@ import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRs
 const s3=new S3Client({});const bedrock=new BedrockRuntimeClient({});
 const bucket=process.env.FILE_BUCKET||'';
 const ownerEmail=String(process.env.TUTOR_EMAIL||'').trim().toLowerCase();
+type Workspace={id:string;name:string;tutorEmail:string;tutorName:string;createdAt:string;active:boolean};
+const defaultWorkspace=():Workspace=>({id:DEFAULT_WORKSPACE,name:'자료구조 튜터링',tutorEmail:ownerEmail,tutorName:String(process.env.TUTOR_DISPLAY_NAME||'튜터'),createdAt:'2026-09-17T00:00:00.000Z',active:true});
+async function workspaceList():Promise<Workspace[]>{return [defaultWorkspace(),...(await allGlobal()).filter(row=>row.pk.startsWith('WORKSPACE#')).map(row=>row.data as Workspace).filter(w=>w.id!==DEFAULT_WORKSPACE)].filter(w=>w.active);}
+async function workspaceFor(id:string):Promise<Workspace|undefined>{return id===DEFAULT_WORKSPACE?defaultWorkspace():((await getGlobal(`WORKSPACE#${id}`))?.data as Workspace|undefined);}
+async function accountWorkspaces(email:string):Promise<Workspace[]>{if(email===ownerEmail)return workspaceList();const ids=(await queryGlobal(`ACCOUNT#${email}`)).map(row=>row.sk.slice(3));if(await getGlobal(`MEMBER#${email}`))ids.unshift(DEFAULT_WORKSPACE);const unique=[...new Set(ids)];return (await Promise.all(unique.map(workspaceFor))).filter((w):w is Workspace=>!!w?.active);}
 const now=()=>new Date().toISOString();
 const bad=(message:string,status=400)=>Object.assign(new Error(message),{status});
 const json=(statusCode:number,data:unknown):APIGatewayProxyStructuredResultV2=>({statusCode,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'},body:JSON.stringify(data)});
@@ -37,6 +42,7 @@ function googleIdentity(event:APIGatewayProxyEventV2){
 }
 async function seed(){
   for(const week of seedWeeks){try{await put(item(`WEEK#${week.id}`,week),true);}catch(e:any){if(e.name!=='ConditionalCheckFailedException')throw e;}}
+  if(workspaceId()!==DEFAULT_WORKSPACE)return;
   if(!await get('SEED#kickoff-notice')){
     try{await put(item(`NOTICE#${kickoffNotice.id}`,kickoffNotice),true);}catch(e:any){if(e.name!=='ConditionalCheckFailedException')throw e;}
     await put(item('SEED#kickoff-notice',{createdAt:now()}));
@@ -65,6 +71,7 @@ async function assignReportsIfReady(){
 async function current(event:APIGatewayProxyEventV2):Promise<Member>{
   const {email}=googleIdentity(event);
   if(email===ownerEmail){
+    if(workspaceId()!==DEFAULT_WORKSPACE)return {id:`admin-${workspaceId()}`,email,name:String(process.env.TUTOR_DISPLAY_NAME||'튜터'),role:'tutor',active:true,createdAt:now()};
     let member=data<Member>(await get(`MEMBER#${email}`));
     if(!member){member={id:'tutor',email,name:String(process.env.TUTOR_DISPLAY_NAME||'튜터'),role:'tutor',active:true,createdAt:now()};await put(item(`MEMBER#${email}`,member),true).catch((e:any)=>{if(e.name!=='ConditionalCheckFailedException')throw e;});}
     if(!member.active)throw bad('계정이 비활성화되었습니다.',403);
@@ -78,6 +85,8 @@ async function current(event:APIGatewayProxyEventV2):Promise<Member>{
 const publicMember=(m:Member)=>({id:m.id,name:m.name,role:m.role});
 async function state(me:Member){
   if(me.role==='tutor')await seed();
+  const workspace=await workspaceFor(workspaceId());
+  const workspaces=await accountWorkspaces(me.email);
   const rows=await all();const members=membersFrom(rows);const allMembers=rows.filter(x=>x.pk.startsWith('MEMBER#')).map(x=>x.data as Member);
   const weeks=rows.filter(x=>x.pk.startsWith('WEEK#')).map(x=>x.data as Week).filter(w=>canViewWeek(me,w)).sort((a,b)=>a.id-b.id);
   const notices=rows.filter(x=>x.pk.startsWith('NOTICE#')).map(x=>x.data).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
@@ -92,7 +101,7 @@ async function state(me:Member){
   const tutorWeeks=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('TUTORWEEK#')).map(x=>x.data):undefined;
   const aiUsage=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('AI#')).map(x=>x.data).sort((a,b)=>b.at.localeCompare(a.at)):undefined;
   const activityLog=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('AUDIT#')).map(x=>x.data).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,100):undefined;
-  return {me:me.role==='tutor'?me:{...publicMember(me),email:me.email},members:me.role==='tutor'?allMembers:members.map(publicMember),weeks,notices,materials,questions,reports,quizzes,attempts,rsvps,config,tutorWeeks,aiUsage,activityLog,inviteActive:me.role==='tutor'?rows.some(x=>x.pk==='INVITE#CURRENT'):undefined};
+  return {workspace,workspaces,isAdmin:me.email===ownerEmail,me:me.role==='tutor'?me:{...publicMember(me),email:me.email},members:me.role==='tutor'?allMembers:members.map(publicMember),weeks,notices,materials,questions,reports,quizzes,attempts,rsvps,config,tutorWeeks,aiUsage,activityLog,inviteActive:me.role==='tutor'?rows.some(x=>x.pk==='INVITE#CURRENT'):undefined};
 }
 async function materialUrl(id:string,me:Member){
   const material=data<Material>(await get(`MATERIAL#${id}`));if(!material)throw bad('자료를 찾지 못했습니다.',404);
@@ -125,16 +134,33 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       const {email}=googleIdentity(event),b=bodyOf(event);
       if(email===ownerEmail)throw bad('튜터 계정은 가입코드가 필요하지 않습니다.');
       const prior=data<Member>(await get(`MEMBER#${email}`));
-      if(prior?.active)return json(200,{ok:true});
+      if(prior?.active)return json(200,{ok:true,workspaceId:workspaceId()});
       if(prior)throw bad('이 계정은 접근이 중지되었습니다.',403);
       const code=txt(b.code,60).replace(/[\s-]/g,'').toUpperCase();
       if(!/^[A-F0-9]{24}$/.test(code))throw bad('가입코드를 확인해 주세요.',403);
       const member:Member={id:randomUUID(),email,name:txt(b.name,80),role:'student',active:true,createdAt:now()};
       try{await joinWithCode(item(`MEMBER#${email}`,member),codeHash(code));}catch{throw bad('가입코드가 다르거나 가입 가능한 인원이 모두 찼습니다.',403);}
       await assignReportsIfReady();
-      return json(201,{ok:true});
+      return json(201,{ok:true,workspaceId:workspaceId()});
     }
     const me=await current(event);
+    if(path==='/admin/workspaces'&&method==='GET'){
+      if(me.email!==ownerEmail)throw bad('권한이 없습니다.',403);
+      const registry=await workspaceList(),rows=await allGlobal();
+      return json(200,registry.map(w=>{const prefix=w.id===DEFAULT_WORKSPACE?'':`WS#${w.id}#`;const scoped=rows.filter(row=>w.id===DEFAULT_WORKSPACE?!row.pk.startsWith('WS#')&&!row.pk.startsWith('ACCOUNT#')&&!row.pk.startsWith('WORKSPACE#'):row.pk.startsWith(prefix));return {...w,studentCount:scoped.filter(row=>row.pk.startsWith(prefix+'MEMBER#')&&row.data?.active&&row.data?.role!=='tutor').length,materialCount:scoped.filter(row=>row.pk.startsWith(prefix+'MATERIAL#')).length,publishedWeeks:scoped.filter(row=>row.pk.startsWith(prefix+'WEEK#')&&row.data?.published).length};}));
+    }
+    if(path==='/admin/workspaces'&&method==='POST'){
+      if(me.email!==ownerEmail)throw bad('권한이 없습니다.',403);
+      const b=bodyOf(event),name=txt(b.name,100),tutorName=txt(b.tutorName,80),tutorEmail=txt(b.tutorEmail,254).toLowerCase();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tutorEmail))throw bad('튜터 이메일을 확인해 주세요.');
+      if(tutorEmail===ownerEmail)throw bad('운영자 계정은 이미 모든 수업에 접근할 수 있습니다.');
+      const existing=await accountWorkspaces(tutorEmail);if(existing.some(w=>w.tutorEmail===tutorEmail))throw bad('이미 등록된 튜터입니다.');
+      const id=randomUUID(),workspace:Workspace={id,name,tutorEmail,tutorName,createdAt:now(),active:true};
+      await putGlobal(item(`WORKSPACE#${id}`,workspace),true);
+      await withWorkspace(id,async()=>{const tutor:Member={id:randomUUID(),email:tutorEmail,name:tutorName,role:'tutor',active:true,createdAt:now()};await put(item(`MEMBER#${tutorEmail}`,tutor),true);await seed();});
+      await putGlobal(item(`ACCOUNT#${tutorEmail}`,{workspaceId:id},`WS#${id}`));
+      return json(201,workspace);
+    }
     if(method==='GET'&&path==='/state')return json(200,await state(me));
     if(method==='GET'&&path==='/export'){
       must(me,['tutor']);const rows=await all();const files:Record<string,Uint8Array>={'records.json':strToU8(JSON.stringify(rows.filter(x=>!x.pk.startsWith('EXPORT#')),null,2))};
@@ -204,12 +230,12 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
     if(method==='POST'&&path==='/materials/upload-url'){
       must(me,['tutor']);const name=txt(b.name,180);const size=Number(b.size);const id=weekId(String(b.weekId));
       if(!name.toLowerCase().endsWith('.pdf')||!Number.isInteger(size)||size<1||size>10_000_000)throw bad('10MB 이하 PDF만 올릴 수 있습니다.');
-      const materialId=randomUUID(),key=`materials/${materialId}.pdf`;
+      const materialId=randomUUID(),key=workspaceId()===DEFAULT_WORKSPACE?`materials/${materialId}.pdf`:`workspaces/${workspaceId()}/materials/${materialId}.pdf`;
       const url=await getSignedUrl(s3,new PutObjectCommand({Bucket:bucket,Key:key,ContentType:'application/pdf'}),{expiresIn:300});
       return json(200,{url,materialId,key});
     }
     if(method==='POST'&&path==='/materials'){
-      must(me,['tutor']);const id=txt(b.materialId,100),week=weekId(String(b.weekId));const key=`materials/${id}.pdf`;
+      must(me,['tutor']);const id=txt(b.materialId,100),week=weekId(String(b.weekId));const key=workspaceId()===DEFAULT_WORKSPACE?`materials/${id}.pdf`:`workspaces/${workspaceId()}/materials/${id}.pdf`;
       if(await get(`MATERIAL#${id}`))throw bad('이미 등록된 자료입니다.');
       const object=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:key})).catch(()=>{throw bad('업로드된 PDF를 찾지 못했습니다.');});
       if(!object.ContentLength||object.ContentLength>10_000_000||object.ContentType!=='application/pdf')throw bad('PDF 파일을 확인해 주세요.');
@@ -295,7 +321,7 @@ function auditAction(method:string,path:string){
   return '';
 }
 async function studentNotification(action:string,actor:Member,path:string,response:APIGatewayProxyStructuredResultV2){
-  if(actor.role==='tutor')return 'none';
+  if(actor.role==='tutor'||workspaceId()!==DEFAULT_WORKSPACE)return 'none';
   const payload=JSON.parse(String(response.body||'{}'));
   const label:Record<string,string>={join:'팀에 가입했어요',rsvp:payload.status==='no'?'다음 튜터링에 참석하기 어렵다고 답했어요':'다음 튜터링에 참석 가능하다고 답했어요',week:'진도를 기록했어요',question:'질문을 올렸어요',reply:'답글을 올렸어요','quiz-attempt':'퀴즈 답안을 제출했어요'};
   if(action==='report'&&payload.status==='submitted')label.report='주별보고서를 제출했어요';
@@ -304,17 +330,42 @@ async function studentNotification(action:string,actor:Member,path:string,respon
   const site=process.env.SITE_URL?.startsWith('https://')?`\n${process.env.SITE_URL}`:'';
   return sendTutorTelegram(`📚 자료구조 튜터링\n${actor.name}님이 ${week?`${week}주차 `:''}${label[action]}${site}`);
 }
-export async function handler(event:APIGatewayProxyEventV2):Promise<APIGatewayProxyStructuredResultV2>{
-  const response=await processRequest(event);
-  const method=event.requestContext.http.method,path=event.rawPath.replace(/^\/api/,'');
-  const action=method==='GET'?'':auditAction(method,path);
-  if(action&&Number(response.statusCode)<300){
-    try{
-      const at=now(),actorEmail=googleIdentity(event).email;
-      const actor=data<Member>(await get(`MEMBER#${actorEmail}`));
-      const notification=actor?await studentNotification(action,actor,path,response):'none';
-      await put(item(`AUDIT#${at}#${randomUUID()}`,{at,actorEmail,action,target:path.slice(0,200),notification}));
-    }catch(error){console.error('Audit write failed',error);}
+async function resolveWorkspace(event:APIGatewayProxyEventV2):Promise<string>{
+  const email=googleIdentity(event).email;
+  const path=event.rawPath.replace(/^\/api/,'');
+  if(path==='/join'){
+    const code=String(bodyOf(event).code||'').replace(/[\s-]/g,'').toUpperCase();
+    if(!/^[A-F0-9]{24}$/.test(code))return DEFAULT_WORKSPACE;
+    for(const w of await workspaceList()){
+      const invite=await withWorkspace(w.id,()=>get('INVITE#CURRENT'));
+      if(invite?.codeHash===codeHash(code))return w.id;
+    }
+    return DEFAULT_WORKSPACE;
   }
-  return response;
+  const requested=String(event.headers?.['x-workspace-id']||'').trim();
+  const allowed=await accountWorkspaces(email);
+  if(requested){if(!allowed.some(w=>w.id===requested))throw bad('이 수업에 접근할 수 없습니다.',403);return requested;}
+  if(!allowed.length)return DEFAULT_WORKSPACE;
+  return allowed.find(w=>w.id===DEFAULT_WORKSPACE)?.id||allowed[0].id;
+}
+export async function handler(event:APIGatewayProxyEventV2):Promise<APIGatewayProxyStructuredResultV2>{
+  try{
+    const path=event.rawPath.replace(/^\/api/,'');
+    if(path==='/config')return processRequest(event);
+    const selected=await resolveWorkspace(event);
+    return await withWorkspace(selected,async()=>{
+      const response=await processRequest(event);
+      const method=event.requestContext.http.method;
+      const action=method==='GET'?'':auditAction(method,path);
+      if(action&&Number(response.statusCode)<300){
+        try{
+          const at=now(),actorEmail=googleIdentity(event).email;
+          const actor=data<Member>(await get(`MEMBER#${actorEmail}`));
+          const notification=actor?await studentNotification(action,actor,path,response):'none';
+          await put(item(`AUDIT#${at}#${randomUUID()}`,{at,actorEmail,action,target:path.slice(0,200),notification}));
+        }catch(error){console.error('Audit write failed',error);}
+      }
+      return response;
+    });
+  }catch(error:any){if(!error.status)console.error(error);return json(error.status||500,{error:error.status?error.message:'요청을 처리하지 못했습니다.'});}
 }

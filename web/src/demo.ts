@@ -1,5 +1,5 @@
 import { seedWeeks, kickoffNotice, gradeQuiz, parseQuizHtml, type Member, type Notice, type Question, type Quiz, type Report, type Week, type Material, type Rsvp } from '../../shared/domain';
-import type { State } from './state';
+import type { State, Workspace } from './state';
 
 const names=['Sample student 1','Sample student 2','Sample student 3','Sample student 4','Sample student 5'];
 const members:Member[]=[{id:'tutor',email:'tutor@example.invalid',name:'박세령',role:'tutor',active:true,createdAt:'2026-09-01'},...names.map((name,i)=>({id:`student-${i+1}`,email:`student-${i+1}@example.invalid`,name,role:'student' as const,active:true,createdAt:`2026-09-0${i+2}`}))];
@@ -14,9 +14,12 @@ const notices:Notice[]=[kickoffNotice];
 const questions:Question[]=[];const reports:Report[]=[];const quizzes:Quiz[]=[];const attempts:any[]=[];const rsvps:Rsvp[]=[];
 let zoomUrl='',inviteActive=false;
 const activityLog:NonNullable<State['activityLog']>=[];
-export const demoState=():State=>({me:members[0],members:[...members],weeks:[...weeks],notices:[...notices],materials:[...materials],questions:[...questions],reports:[...reports],quizzes:[...quizzes],attempts:[...attempts],rsvps:[...rsvps],config:{zoomUrl},tutorWeeks:[],activityLog:[...activityLog],inviteActive});
+const demoWorkspace:Workspace={id:'default',name:'자료구조 튜터링',tutorEmail:'tutor@example.invalid',tutorName:'박세령',createdAt:'2026-09-17',active:true,studentCount:5,materialCount:2,publishedWeeks:2};
+export const demoState=():State=>({workspace:demoWorkspace,workspaces:[demoWorkspace],isAdmin:true,me:members[0],members:[...members],weeks:[...weeks],notices:[...notices],materials:[...materials],questions:[...questions],reports:[...reports],quizzes:[...quizzes],attempts:[...attempts],rsvps:[...rsvps],config:{zoomUrl},tutorWeeks:[],activityLog:[...activityLog],inviteActive});
 export async function demoApi(path:string,method='GET',data:any={}):Promise<any>{
   if(path==='/state')return demoState();
+  if(path==='/admin/workspaces'&&method==='GET')return [demoWorkspace];
+  if(path==='/admin/workspaces'&&method==='POST')throw new Error('실제 Google 계정을 초대하려면 배포된 사이트에서 진행해 주세요.');
   const file=path.match(/^\/materials\/demo-(\d+)\/url$/);if(file&&method==='GET')throw new Error('교수님 PDF는 실제 로그인 후에만 열 수 있습니다.');
   if(path==='/config'&&method==='PUT'){zoomUrl=data.zoomUrl;return {ok:true};}
   if(path==='/invite-code'&&method==='POST'){inviteActive=true;return {code:'A1B2-C3D4-E5F6-1234-5678-9ABC'};}
