@@ -108,3 +108,26 @@ html:is([lang="ru"],[lang="kk"]) .board-face small{font-size:.58rem}
 html:is([lang="en"],[lang="ru"],[lang="kk"]) .login-art-copy strong,html:is([lang="en"],[lang="ru"],[lang="kk"]) .login-panel .brand-mark,html:is([lang="en"],[lang="ru"],[lang="kk"]) .login-panel h1{font-family:Arial,'Apple SD Gothic Neo',sans-serif;font-weight:800;letter-spacing:-.035em}
 @media(max-width:900px){.login-layout{grid-template-columns:minmax(0,1fr) minmax(400px,1fr)}.login-panel{padding:45px}}
 @media(max-width:720px){.login-page{display:block;padding:16px;min-height:100svh}.login-page>.language-button{top:28px;right:28px}.login-layout{display:flex;flex-direction:column;min-height:0;padding:8px;border-radius:23px}.login-art{height:240px;min-height:240px;border-radius:16px}.login-art img{object-position:center 53%}.login-art-copy{left:21px;bottom:20px;gap:4px}.login-art-copy strong{font-size:1.7rem}.login-panel{padding:32px 23px 27px}.login-panel .eyebrow{margin-bottom:16px}.login-panel .brand-mark{font-size:1.2rem;margin-bottom:25px}.login-panel h1{font-size:2rem;margin-bottom:12px}.login-panel p{font-size:.88rem;margin-bottom:24px}.login-panel .button{min-height:53px;font-size:.84rem}}
+
+.map-mobile-actions{display:none}
+@media(max-width:720px){
+  .bottom-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:7px 8px max(8px,env(safe-area-inset-bottom));overflow:visible;box-shadow:0 -6px 22px #2d214013}
+  .bottom-nav button{min-width:0;min-height:55px;padding:5px 2px;border-radius:13px;justify-content:center;gap:3px}
+  .bottom-nav button.active{background:#f1eaff;color:#60468f}
+  .bottom-nav button>span{font-size:1.28rem;line-height:1}
+  .bottom-nav button>small{font-size:.68rem;line-height:1.15;white-space:nowrap}
+  .mobile-more-backdrop{position:fixed;inset:0;z-index:29;background:#241b3259}
+  .mobile-more-menu{position:absolute;bottom:calc(74px + env(safe-area-inset-bottom));left:12px;right:12px;max-height:min(65svh,520px);overflow-y:auto;padding:13px;background:#fff;border:1px solid #e9e0f1;border-radius:21px;box-shadow:0 16px 45px #241b3240}
+  .mobile-more-head{display:flex;align-items:center;justify-content:space-between;padding:4px 8px 12px;color:#342a41;font-size:.87rem}
+  .mobile-more-head button{border:0;background:#f4effa;color:#5d4a77;border-radius:50%;width:32px;height:32px;font-size:1.2rem;cursor:pointer}
+  .mobile-more-menu>button{display:flex;align-items:center;gap:13px;width:100%;min-height:46px;padding:9px 13px;border:0;border-radius:11px;background:transparent;color:#4c415b;text-align:left;font:inherit;font-size:.87rem;font-weight:700;cursor:pointer}
+  .mobile-more-menu>button.active{background:#f1eaff;color:#60468f}
+  .mobile-more-menu>button span{width:23px;text-align:center;color:#8263b1;font-size:1.15rem}
+  .map-top-actions>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+  .map-top-actions>div .button{min-width:0;min-height:44px;padding:8px 7px;justify-content:center;text-align:center;white-space:normal;line-height:1.2;font-size:.75rem}
+  .map-top-actions>div a.button{grid-column:1/-1;min-height:40px}
+  .map-mobile-actions{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px 15px;background:#fffdf9;border-top:1px solid #eee5ec}
+  .map-mobile-actions button{min-height:38px;padding:7px 11px;border:1px solid #e0cbb0;border-radius:10px;background:#fff7e8;color:#684a32;font:inherit;font-size:.78rem;font-weight:800;white-space:nowrap;cursor:pointer}
+  .map-mobile-actions span{font-size:.7rem;color:#776c80;text-align:right;line-height:1.3}
+  .map-viewport{scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+}
