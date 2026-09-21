@@ -12,6 +12,7 @@ test('student preview hides unpublished weeks, answers, other replies, and tutor
     members:[{id:'tutor',name:'Tutor',email:'tutor@example.com',role:'tutor',active:true,createdAt:''},{id:'student',name:'Student',email:'student@example.com',role:'student',active:true,createdAt:''},{id:'other',name:'Other',email:'other@example.com',role:'student',active:true,createdAt:''}],
     weeks:[{...seedWeeks[0],published:true},seedWeeks[1]],notices:[],
     materials:[{id:'public',weekId:1,name:'public.pdf',key:'one',size:1,createdAt:''},{id:'private',weekId:2,name:'private.pdf',key:'two',size:1,createdAt:''}],
+    reportGuides:[],
     questions:[],reports:[{weekId:1,authorId:'other',content:'Private draft',status:'draft',updatedAt:''}],
     quizzes:[quiz],attempts:[],rsvps:[{weekId:1,memberId:'student',status:'no',reason:'My reason',updatedAt:''},{weekId:1,memberId:'other',status:'no',reason:'Other private reason',updatedAt:''}],
     config:{zoomUrl:''},tutorWeeks:[{weekId:1,attendance:{student:false},notes:'Tutor note'}],activityLog:[{at:'',actorEmail:'',action:'',target:''}]

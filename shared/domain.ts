@@ -5,6 +5,7 @@ export type SessionPart = { id: string; title: string; memberId: string; minutes
 export type Week = { id: number; date: string; time: string; duration: number; location: string; topic: string; concepts: string; published: boolean; cleared: boolean; sessionParts: SessionPart[]; reportMemberId?: string; progressMaterialId?: string; progressPage?: number; actualDate?: string };
 export type Notice = { id: string; title: string; body: string; createdAt: string; pinned: boolean; attachment?: { id: string; name: string; size: number } };
 export type Material = { id: string; weekId: number; name: string; key: string; size: number; createdAt: string };
+export type ReportGuide = { id: string; kind: 'template' | 'in-person' | 'online'; name: string; size: number; updatedAt: string };
 export type Report = { weekId: number; authorId: string; content: string; status: 'draft' | 'submitted'; updatedAt: string; submittedAt?: string };
 export type Question = { id: string; title: string; body: string; authorId: string; createdAt: string; resolved: boolean; replies: Reply[] };
 export type Reply = { id: string; body: string; authorId: string; createdAt: string };

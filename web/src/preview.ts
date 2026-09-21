@@ -15,6 +15,7 @@ export function studentPreview(state:State,memberId:string):State|null{
     weeks,
     notices:state.notices,
     materials:state.materials.filter(m=>visibleWeeks.has(m.weekId)),
+    reportGuides:state.reportGuides,
     questions:state.questions,
     reports:state.reports.filter(r=>visibleWeeks.has(r.weekId)&&(r.status==='submitted'||r.authorId===member.id)),
     quizzes,

@@ -15,7 +15,7 @@ const questions:Question[]=[];const reports:Report[]=[];const quizzes:Quiz[]=[];
 let zoomUrl='',inviteActive=false;
 const activityLog:NonNullable<State['activityLog']>=[];
 const demoWorkspace:Workspace={id:'default',name:'자료구조 튜터링',tutorEmail:'tutor@example.invalid',tutorName:'박세령',createdAt:'2026-09-17',active:true,studentCount:5,materialCount:2,publishedWeeks:2};
-export const demoState=():State=>({workspace:demoWorkspace,workspaces:[demoWorkspace],isAdmin:true,me:members[0],members:[...members],weeks:[...weeks],notices:[...notices],materials:[...materials],questions:[...questions],reports:[...reports],quizzes:[...quizzes],attempts:[...attempts],rsvps:[...rsvps],config:{zoomUrl},tutorWeeks:[],activityLog:[...activityLog],inviteActive});
+export const demoState=():State=>({workspace:demoWorkspace,workspaces:[demoWorkspace],isAdmin:true,me:members[0],members:[...members],weeks:[...weeks],notices:[...notices],materials:[...materials],reportGuides:[],questions:[...questions],reports:[...reports],quizzes:[...quizzes],attempts:[...attempts],rsvps:[...rsvps],config:{zoomUrl},tutorWeeks:[],activityLog:[...activityLog],inviteActive});
 export async function demoApi(path:string,method='GET',data:any={}):Promise<any>{
   if(path==='/state')return demoState();
   if(path==='/admin/workspaces'&&method==='GET')return [demoWorkspace];

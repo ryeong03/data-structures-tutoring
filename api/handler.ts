@@ -5,8 +5,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { zipSync, strToU8 } from 'fflate';
 import { all, allGlobal, get, getGlobal, put, putGlobal, remove, queryGlobal, withWorkspace, workspaceId, DEFAULT_WORKSPACE, joinWithCode, redeemTutorInvite, removeJoinedMember, type Item } from './store.js';
 import { sendTutorTelegram } from './telegram.js';
-import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type Notice, type Rsvp } from '../shared/domain.js';
+import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type ReportGuide, type Notice, type Rsvp } from '../shared/domain.js';
 import { isPdfHeader, noticePdfKey, validPdfUpload } from './notice-attachment.js';
+import { reportGuideKey } from './report-guide.js';
 import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRsvp } from '../shared/access.js';
 import { normalizeInviteCode, isTutorInviteCode, formatTutorInviteCode } from '../shared/invites.js';
 
@@ -93,6 +94,7 @@ async function state(me:Member){
   const weeks=rows.filter(x=>x.pk.startsWith('WEEK#')).map(x=>x.data as Week).filter(w=>canViewWeek(me,w)).sort((a,b)=>a.id-b.id);
   const notices=rows.filter(x=>x.pk.startsWith('NOTICE#')).map(x=>x.data).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   const materials=rows.filter(x=>x.pk.startsWith('MATERIAL#')).map(x=>x.data as Material).filter(m=>me.role==='tutor'||weeks.some(w=>w.id===m.weekId));
+  const reportGuides=rows.filter(x=>x.pk.startsWith('REPORTGUIDE#')).map(x=>x.data as ReportGuide);
   const replies=rows.filter(x=>x.pk.startsWith('REPLY#')).map(x=>x.data);
   const questions=rows.filter(x=>x.pk.startsWith('QUESTION#')).map(x=>({...x.data,replies:replies.filter(r=>r.questionId===x.data.id)})).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   const reports=rows.filter(x=>x.pk.startsWith('REPORT#')).map(x=>x.data as Report).filter(r=>me.role==='tutor'||weeks.some(w=>w.id===r.weekId)&&(r.status==='submitted'||r.authorId===me.id));
@@ -103,7 +105,7 @@ async function state(me:Member){
   const tutorWeeks=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('TUTORWEEK#')).map(x=>x.data):undefined;
   const aiUsage=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('AI#')).map(x=>x.data).sort((a,b)=>b.at.localeCompare(a.at)):undefined;
   const activityLog=me.role==='tutor'?rows.filter(x=>x.pk.startsWith('AUDIT#')).map(x=>x.data).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,100):undefined;
-  return {workspace:workspace&&publicWorkspace(workspace),workspaces:workspaces.map(publicWorkspace),isAdmin:me.email===ownerEmail,me:me.role==='tutor'?me:{...publicMember(me),email:me.email},members:me.role==='tutor'?allMembers:members.map(publicMember),weeks,notices,materials,questions,reports,quizzes,attempts,rsvps,config,tutorWeeks,aiUsage,activityLog,inviteActive:me.role==='tutor'?rows.some(x=>x.pk==='INVITE#CURRENT'):undefined};
+  return {workspace:workspace&&publicWorkspace(workspace),workspaces:workspaces.map(publicWorkspace),isAdmin:me.email===ownerEmail,me:me.role==='tutor'?me:{...publicMember(me),email:me.email},members:me.role==='tutor'?allMembers:members.map(publicMember),weeks,notices,materials,reportGuides,questions,reports,quizzes,attempts,rsvps,config,tutorWeeks,aiUsage,activityLog,inviteActive:me.role==='tutor'?rows.some(x=>x.pk==='INVITE#CURRENT'):undefined};
 }
 async function materialUrl(id:string,me:Member){
   const material=data<Material>(await get(`MATERIAL#${id}`));if(!material)throw bad('자료를 찾지 못했습니다.',404);
@@ -164,6 +166,7 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       must(me,['tutor']);const rows=await all();const files:Record<string,Uint8Array>={'records.json':strToU8(JSON.stringify(rows.filter(x=>!x.pk.startsWith('EXPORT#')),null,2))};
       for(const m of rows.filter(x=>x.pk.startsWith('MATERIAL#'))){const material=m.data as Material;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:material.key}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`materials/${material.id}-${material.name.replace(/[^\w.가-힣-]/g,'_')}`]=bytes;}
       for(const n of rows.filter(x=>x.pk.startsWith('NOTICE#'))){const notice=n.data as Notice;if(!notice.attachment)continue;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:noticePdfKey(workspaceId(),notice.attachment.id)}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`notice-attachments/${notice.id}-${notice.attachment.name.replace(/[^\w.가-힣-]/g,'_')}`]=bytes;}
+      for(const row of rows.filter(x=>x.pk.startsWith('REPORTGUIDE#'))){const guide=row.data as ReportGuide;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:reportGuideKey(workspaceId(),guide.kind,guide.id)}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`report-guides/${guide.kind}.pdf`]=bytes;}
       const key=`exports/${randomUUID()}.zip`;await s3.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:zipSync(files,{level:0}),ContentType:'application/zip'}));
       return json(200,{url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:key}),{expiresIn:300})});
     }
@@ -245,6 +248,31 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       await put(item(`MATERIAL#${id}`,material),true);return json(201,material);
     }
     if((match=path.match(/^\/materials\/([^/]+)\/url$/))&&method==='GET')return json(200,await materialUrl(match[1],me));
+    if(method==='POST'&&path==='/report-guides/upload-url'){
+      must(me,['tutor']);const name=txt(b.name,180),size=Number(b.size),kind=txt(b.kind,20);
+      const uploadId=randomUUID(),key=validate(()=>reportGuideKey(workspaceId(),kind,uploadId));
+      if(!validPdfUpload(name,size))throw bad('10MB 이하 PDF만 올릴 수 있습니다.');
+      return json(200,{url:await getSignedUrl(s3,new PutObjectCommand({Bucket:bucket,Key:key,ContentType:'application/pdf'}),{expiresIn:300}),uploadId});
+    }
+    if(method==='PUT'&&path==='/report-guides'){
+      must(me,['tutor']);const kind=txt(b.kind,20),name=txt(b.name,180),id=txt(b.uploadId,100),key=validate(()=>reportGuideKey(workspaceId(),kind,id));
+      const object=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:key})).catch(()=>{throw bad('업로드된 PDF를 찾지 못했습니다.');});
+      if(!object.ContentLength||!validPdfUpload(name,object.ContentLength)||object.ContentType!=='application/pdf')throw bad('PDF 파일을 확인해 주세요.');
+      const signature=await s3.send(new GetObjectCommand({Bucket:bucket,Key:key,Range:'bytes=0-4'}));
+      if(!isPdfHeader(await signature.Body?.transformToByteArray()))throw bad('PDF 파일 형식을 확인해 주세요.');
+      const guide:ReportGuide={id,kind:kind as ReportGuide['kind'],name,size:object.ContentLength,updatedAt:now()};
+      const previous=data<ReportGuide>(await get(`REPORTGUIDE#${kind}`));
+      await put(item(`REPORTGUIDE#${kind}`,guide));
+      if(previous)await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:reportGuideKey(workspaceId(),kind,previous.id)}));
+      return json(200,guide);
+    }
+    if((match=path.match(/^\/report-guides\/([^/]+)\/url$/))&&method==='GET'){
+      const kind=match[1];
+      const guide=data<ReportGuide>(await get(`REPORTGUIDE#${kind}`));if(!guide)throw bad('보고서 자료를 찾지 못했습니다.',404);
+      const key=validate(()=>reportGuideKey(workspaceId(),kind,guide.id));
+      const disposition=event.queryStringParameters?.download==='1'?'attachment':'inline';
+      return json(200,{url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:key,ResponseContentType:'application/pdf',ResponseContentDisposition:`${disposition}; filename*=UTF-8''${encodeURIComponent(guide.name)}`}),{expiresIn:300})});
+    }
     if(method==='POST'&&path==='/notice-attachments/upload-url'){
       must(me,['tutor']);const name=txt(b.name,180),size=Number(b.size);
       if(!validPdfUpload(name,size))throw bad('10MB 이하 PDF만 올릴 수 있습니다.');
@@ -342,6 +370,7 @@ function auditAction(method:string,path:string){
   if(path==='/questions')return 'question';
   if(path==='/admin/tutor-invites')return 'tutor-invite';
   if(path.startsWith('/reports/'))return 'report';
+  if(path==='/report-guides')return 'report-guide';
   if(path.startsWith('/tutor-weeks/'))return 'tutor-note';
   if(path.includes('/attempts'))return 'quiz-attempt';
   if(path.includes('/generate'))return 'quiz-generate';
