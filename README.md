@@ -2,7 +2,7 @@
 
 <p align="center">튜터와 튜티가 한 주씩 함께 나아가는 자료구조 학습 공간<br>주차별 지도에서 자료를 찾고, 서로 설명하고, 질문과 기록을 이어갑니다.</p>
 
-<p align="center"><a href="https://d1nhri0xudbp4k.cloudfront.net/">사이트 열기</a> · <a href="#사용-화면">사용 화면</a> · <a href="#주요-기능">주요 기능</a> · <a href="#빠른-시작">빠른 시작</a> · <a href="#구조와-문서">구조와 문서</a></p>
+<p align="center"><a href="https://d1nhri0xudbp4k.cloudfront.net/">사이트 열기</a> · <a href="#사용-화면">사용 화면</a> · <a href="#주요-기능">주요 기능</a> · <a href="#빠른-시작">빠른 시작</a> · <a href="#기술-스택">기술 스택</a> · <a href="#구조와-문서">구조와 문서</a></p>
 
 <p align="center"><a href="https://github.com/ryeong03/data-structures-tutoring/actions/workflows/deploy.yml"><img src="https://github.com/ryeong03/data-structures-tutoring/actions/workflows/deploy.yml/badge.svg" alt="Check and deploy"></a></p>
 
@@ -72,20 +72,22 @@ npm run dev:demo
 
 `http://127.0.0.1:5173/`에서 열립니다. 로컬 데모는 실제 Google 로그인·파일 저장·AI 호출을 하지 않습니다. 검사 명령은 `npm run typecheck`, `npm test`, `npm run build`입니다.
 
-## 구조와 문서
+## 기술 스택
 
-```mermaid
-flowchart LR
-    U[튜터·튜티] --> CF[CloudFront]
-    U --> C[Cognito · Google 로그인]
-    CF --> WEB[S3 · React 화면]
-    CF --> API[API Gateway] --> L[Lambda · 권한과 기능]
-    L --> DB[DynamoDB · 수업별 기록]
-    L --> FILE[비공개 S3 · PDF]
-    L --> SEC[Secrets Manager · 봇 설정]
-    L --> TG[Telegram Bot API · 튜터 알림]
-    GH[GitHub Actions] --> CDK[AWS CDK] --> CF
-```
+[![사용자, Front-End, Back-End, 데이터·스토리지, 외부 서비스, DevOps로 나눈 시스템 아키텍처](docs/media/architecture.png)](docs/media/architecture.png)
+
+| 영역 | 사용 기술 |
+| --- | --- |
+| 프런트엔드 | React 19 · TypeScript 5.9 · Vite 7 · AWS Amplify(로그인 SDK) |
+| 백엔드 | Amazon API Gateway(HTTP API) · AWS Lambda(Node.js 22 · TypeScript) · Amazon Cognito |
+| 데이터 · 스토리지 | Amazon DynamoDB(시점 복구) · 비공개 Amazon S3(서명 링크) · AWS Secrets Manager |
+| 전달 · 호스팅 | Amazon CloudFront · Amazon S3 정적 호스팅 |
+| 배포 · 운영 | AWS CDK · CloudFormation · GitHub Actions(OIDC) · AWS Budgets |
+| 외부 서비스 | Google OAuth 2.0(로그인) · Telegram Bot API(튜터 알림) |
+
+상시 실행 서버(EC2)나 컨테이너 오케스트레이션은 사용하지 않습니다. 요청이 있을 때만 Lambda가 실행되며, 그 이유는 [서비스 구조](docs/ARCHITECTURE.md)에 정리했습니다.
+
+## 구조와 문서
 
 | 문서 | 내용 |
 | --- | --- |
