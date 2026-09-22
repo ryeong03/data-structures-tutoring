@@ -7,3 +7,5 @@ cdk.out/
 .local/
 cdk-outputs.json
 .DS_Store
+*.pdf
+!docs/**/*.pdf
