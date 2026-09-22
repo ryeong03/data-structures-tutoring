@@ -208,9 +208,11 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       if(me.role==='rep'){
         if(!canEditProgress(me,week))throw bad('공개되지 않은 주차입니다.',404);
         const materialId=b.progressMaterialId?txt(b.progressMaterialId,100):undefined;
-        if(materialId){const material=data<Material>(await get(`MATERIAL#${materialId}`));if(!material||material.weekId!==id)throw bad('이 주차의 자료를 선택해 주세요.');}
-        const page=Number(b.progressPage);if(!materialId||!Number.isInteger(page)||page<1)throw bad('자료와 페이지를 입력해 주세요.');
-        await put(item(`WEEK#${id}`,{...week,progressMaterialId:materialId,progressPage:page}));return json(200,{ok:true});
+        if(materialId){const material=data<Material>(await get(`MATERIAL#${materialId}`));if(!material)throw bad('자료를 찾지 못했습니다.');}
+        const label=typeof b.progressLabel==='string'?txt(b.progressLabel,100):undefined;
+        const page=Number(b.progressPage);if((!materialId&&!label)||!Number.isInteger(page)||page<1)throw bad('자료를 고르거나 직접 적고 페이지를 입력해 주세요.');
+        const next:Week={...week,progressPage:page};delete next.progressMaterialId;delete next.progressLabel;if(materialId)next.progressMaterialId=materialId;if(label)next.progressLabel=label;
+        await put(item(`WEEK#${id}`,next));return json(200,{ok:true});
       }
       must(me,['tutor']);const update:Week={...week};
       if(typeof b.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(b.date))update.date=b.date;
@@ -224,7 +226,8 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       if(typeof b.cleared==='boolean')update.cleared=b.cleared;
       if(typeof b.actualDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(b.actualDate))update.actualDate=b.actualDate;
       if(typeof b.reportMemberId==='string'){const rows=await all();if(!membersFrom(rows).some(m=>m.id===b.reportMemberId&&m.role!=='tutor'))throw bad('담당 튜티를 선택해 주세요.');update.reportMemberId=b.reportMemberId;}
-      if(typeof b.progressMaterialId==='string'){const material=data<Material>(await get(`MATERIAL#${b.progressMaterialId}`));if(!material||material.weekId!==id)throw bad('이 주차의 자료를 선택해 주세요.');update.progressMaterialId=b.progressMaterialId;}
+      if(typeof b.progressMaterialId==='string'){if(b.progressMaterialId){const material=data<Material>(await get(`MATERIAL#${b.progressMaterialId}`));if(!material)throw bad('자료를 찾지 못했습니다.');update.progressMaterialId=b.progressMaterialId;}else delete update.progressMaterialId;}
+      if(typeof b.progressLabel==='string'){const label=txt(b.progressLabel,100);if(label)update.progressLabel=label;else delete update.progressLabel;}
       if(Number.isInteger(b.progressPage)&&b.progressPage>0)update.progressPage=b.progressPage;
       if(update.reportMemberId!==week.reportMemberId){const old=data<Report>(await get(`REPORT#${id}`));if(old){await put(item(`REPORTARCHIVE#${id}#${randomUUID()}`,old));await remove(`REPORT#${id}`);}}
       await put(item(`WEEK#${id}`,update));return json(200,{ok:true});
