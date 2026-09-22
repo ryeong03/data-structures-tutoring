@@ -20,7 +20,11 @@ const dateLabel=(date:string)=>{
 };
 const person=(state:State,id?:string)=>state.members.find(m=>m.id===id)?.name||'담당자 미정';
 const weekTitle=(w:Week)=>`${w.id}주차 · ${w.topic}`;
-const currentWeek=(weeks:Week[])=>{const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());return weeks.find(w=>w.date>=today)||weeks.at(-1);};
+const seoulToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const currentWeek=(weeks:Week[])=>{const today=seoulToday();return weeks.find(w=>w.date>=today)||weeks.at(-1);};
+const KICKOFF_DATE='2026-09-17';
+const kickoffPending=(state:State)=>state.workspace?.id==='default'&&seoulToday()<=KICKOFF_DATE;
+const dateBadge=(date:string)=>{const [year,month,day]=date.split('-').map(Number);const weekday=new Date(Date.UTC(year,month-1,day,12)).getUTCDay();return {top:['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][month-1],big:String(day),sub:['일','월','화','수','목','금','토'][weekday]+'요일'};};
 
 let previewMode=false;
 function Avatar({role}:{role:'tutor'|'rep'|'student'}){
@@ -136,7 +140,7 @@ function Home({state,run,busy,onOpenWeek,onOpenZoom}:Props){
   };
   const show=(id:number|null)=>{setSelectedId(id);setOpen(true);};
   return <div className="home-map">
-    <div className="map-top-actions"><span className="schedule-note"><strong>화요일 11:00 ~ 11:50</strong><span>장소는 전날 웹 공지</span><span className="break-note">10/20 시험기간 휴강</span></span><div><button className="button outline" onClick={onOpenZoom}>{state.workspace?.id==="default"?"첫 미팅 · Zoom":"Zoom 모임"}</button><button className="button outline" onClick={()=>show(current?.id||null)}>다음 튜터링 참석 여부{state.me.role==='tutor'?` (${responseCount})`:''}</button><a className="button subtle" href="https://cyber.ewha.ac.kr/" target="_blank" rel="noreferrer">이화사이버캠퍼스 ↗</a></div></div>
+    <div className="map-top-actions"><span className="schedule-note"><strong>화요일 11:00 ~ 11:50</strong><span>장소는 전날 웹 공지</span><span className="break-note">10/20 시험기간 휴강</span></span><div><button className="button outline" onClick={onOpenZoom}>{kickoffPending(state)?"첫 미팅 · Zoom":current?`${current.id}회차 · Zoom`:"Zoom 모임"}</button><button className="button outline" onClick={()=>show(current?.id||null)}>다음 튜터링 참석 여부{state.me.role==='tutor'?` (${responseCount})`:''}</button><a className="button subtle" href="https://cyber.ewha.ac.kr/" target="_blank" rel="noreferrer">이화사이버캠퍼스 ↗</a></div></div>
     <AdventureMap weeks={state.weeks} tutorName={state.workspace?.tutorName||"튜터"} workspaceId={state.workspace?.id} onOpenWeek={id=>show(id)} onOpenBoard={()=>show(null)}/>
     {open&&<div className={`drawer-backdrop ${week?'':'board-backdrop'}`} onClick={()=>setOpen(false)}><section className={`week-drawer ${week?'':'board-modal'}`} role="dialog" aria-modal="true" aria-label={week?`${week.id}주차와 공지사항`:'공지사항'} onClick={event=>event.stopPropagation()}><div className="drawer-top"><div><span className="eyebrow">TUTORING BOARD</span><h2>{week?`${String(week.id).padStart(2,'0')} · ${week.topic}`:'공지사항'}</h2></div><button className="drawer-close" aria-label="닫기" onClick={()=>setOpen(false)}>×</button></div>
       {week&&<div className="drawer-summary"><span>{dateLabel(week.date)} · {week.time} · {week.location} · {week.duration}분</span><strong>보고서 담당: {person(state,week.reportMemberId)} · {week.progressPage?`${week.progressPage}페이지까지`:'진도 기록 전'}</strong><p>{week.concepts}</p><button className="button primary" onClick={()=>{setOpen(false);onOpenWeek?.(week.id);}}>이 주차 자료 보기 ↗</button></div>}
@@ -181,15 +185,18 @@ function Home({state,run,busy,onOpenWeek,onOpenZoom}:Props){
 function ZoomMeeting({state,run,busy}:Props){
   const [zoom,setZoom]=useState(state.config.zoomUrl||'');
   useEffect(()=>setZoom(state.config.zoomUrl||''),[state.config.zoomUrl]);
+  const kickoff=kickoffPending(state);
+  const week=currentWeek(state.weeks);
+  const badge=kickoff?{top:'SEP',big:'17',sub:'목요일'}:week?dateBadge(week.date):null;
   return <div className="zoom-page">
     <section className="zoom-card">
-      {state.workspace?.id==='default'?<div className="zoom-date" aria-label="2026년 9월 17일 목요일"><span>SEP</span><strong>17</strong><small>목요일</small></div>:<div className="zoom-date"><span>10</span><strong>週</strong><small>온라인 모임</small></div>}
-      <div className="zoom-content">{state.workspace?.id==='default'?<><span className="eyebrow">FIRST MEETING · 2026 2학기</span><h2>먼저 만나서 인사해요</h2><p>첫 미팅에서는 서로 소개하고, 튜터링 방식과 앞으로의 일정을 함께 안내합니다.</p><div className="zoom-meta"><span>18:30 시작</span><span>Zoom 온라인 모임</span></div></>:<><span className="eyebrow">ZOOM · 2026 2학기</span><h2>온라인 모임</h2><p>튜터가 Zoom 링크를 등록하면 이곳에서 바로 입장할 수 있어요.</p></>}
+      {badge?<div className="zoom-date"><span>{badge.top}</span><strong>{badge.big}</strong><small>{badge.sub}</small></div>:<div className="zoom-date"><span>10</span><strong>週</strong><small>온라인 모임</small></div>}
+      <div className="zoom-content">{kickoff?<><span className="eyebrow">FIRST MEETING · 2026 2학기</span><h2>먼저 만나서 인사해요</h2><p>첫 미팅에서는 서로 소개하고, 튜터링 방식과 앞으로의 일정을 함께 안내합니다.</p><div className="zoom-meta"><span>18:30 시작</span><span>Zoom 온라인 모임</span></div></>:week?<><span className="eyebrow">{week.id}회차 · 2026 2학기</span><h2>{week.id}회차 모임</h2><p>{week.topic}</p><div className="zoom-meta"><span>{week.time} 시작</span><span>{week.location}</span></div></>:<><span className="eyebrow">ZOOM · 2026 2학기</span><h2>온라인 모임</h2><p>튜터가 Zoom 링크를 등록하면 이곳에서 바로 입장할 수 있어요.</p></>}
         {state.config.zoomUrl?<a className="button primary zoom-join" href={state.config.zoomUrl} target="_blank" rel="noopener noreferrer">Zoom 회의실 들어가기 ↗</a>:<div className="zoom-pending">Zoom 링크를 받으면 이곳에서 바로 들어갈 수 있어요.</div>}
       </div>
     </section>
     {state.me.role==='tutor'&&<form className="zoom-edit" onSubmit={e=>{e.preventDefault();void run(()=>api('/config','PUT',{zoomUrl:zoom.trim()}),'Zoom 링크를 저장했습니다.');}}><label>팀원에게 보여줄 Zoom 링크<input type="url" value={zoom} onChange={e=>setZoom(e.target.value)} placeholder="https://..."/></label><button className="button outline" disabled={busy}>링크 저장</button></form>}
-    <p className="zoom-next">정규 튜터링은 <strong>9월 22일 화요일 11:00</strong>에 시작해요. 장소는 공간 대여 확인 후 모임 전날 이 웹사이트에 공지합니다.</p>
+    {kickoff?<p className="zoom-next">정규 튜터링은 <strong>9월 22일 화요일 11:00</strong>에 시작해요. 장소는 공간 대여 확인 후 모임 전날 이 웹사이트에 공지합니다.</p>:week&&<p className="zoom-next">이번 튜터링은 <strong>{dateLabel(week.date)} {week.time}</strong>에 진행해요. 장소는 {week.location}.</p>}
   </div>;
 }
 
