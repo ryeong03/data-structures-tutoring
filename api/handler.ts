@@ -7,7 +7,7 @@ import { all, allGlobal, get, getGlobal, put, putGlobal, remove, queryGlobal, wi
 import { sendTutorTelegram } from './telegram.js';
 import { seedWeeks, kickoffNotice, validateSessionParts, validateQuizItems, parseQuizHtml, gradeQuiz, type Member, type Week, type Quiz, type Report, type Question, type Material, type ReportGuide, type Notice, type Rsvp } from '../shared/domain.js';
 import { isPdfHeader, noticePdfKey, validPdfUpload } from './notice-attachment.js';
-import { reportGuideKey } from './report-guide.js';
+import { guideContentType, guideExt, reportGuideKey, validGuideHeader, validGuideUpload } from './report-guide.js';
 import { canViewWeek, canEditProgress, canWriteReport, canResolveQuestion, canRsvp } from '../shared/access.js';
 import { normalizeInviteCode, isTutorInviteCode, formatTutorInviteCode } from '../shared/invites.js';
 
@@ -166,7 +166,7 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
       must(me,['tutor']);const rows=await all();const files:Record<string,Uint8Array>={'records.json':strToU8(JSON.stringify(rows.filter(x=>!x.pk.startsWith('EXPORT#')),null,2))};
       for(const m of rows.filter(x=>x.pk.startsWith('MATERIAL#'))){const material=m.data as Material;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:material.key}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`materials/${material.id}-${material.name.replace(/[^\w.가-힣-]/g,'_')}`]=bytes;}
       for(const n of rows.filter(x=>x.pk.startsWith('NOTICE#'))){const notice=n.data as Notice;if(!notice.attachment)continue;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:noticePdfKey(workspaceId(),notice.attachment.id)}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`notice-attachments/${notice.id}-${notice.attachment.name.replace(/[^\w.가-힣-]/g,'_')}`]=bytes;}
-      for(const row of rows.filter(x=>x.pk.startsWith('REPORTGUIDE#'))){const guide=row.data as ReportGuide;const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:reportGuideKey(workspaceId(),guide.kind,guide.id)}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`report-guides/${guide.kind}.pdf`]=bytes;}
+      for(const row of rows.filter(x=>x.pk.startsWith('REPORTGUIDE#'))){const guide=row.data as ReportGuide;const guideFileExt=guide.ext||'pdf';const result=await s3.send(new GetObjectCommand({Bucket:bucket,Key:reportGuideKey(workspaceId(),guide.kind,guide.id,guideFileExt)}));const bytes=await result.Body?.transformToByteArray();if(bytes)files[`report-guides/${guide.kind}.${guideFileExt}`]=bytes;}
       const key=`exports/${randomUUID()}.zip`;await s3.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:zipSync(files,{level:0}),ContentType:'application/zip'}));
       return json(200,{url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:key}),{expiresIn:300})});
     }
@@ -253,28 +253,32 @@ async function processRequest(event:APIGatewayProxyEventV2):Promise<APIGatewayPr
     if((match=path.match(/^\/materials\/([^/]+)\/url$/))&&method==='GET')return json(200,await materialUrl(match[1],me));
     if(method==='POST'&&path==='/report-guides/upload-url'){
       must(me,['tutor']);const name=txt(b.name,180),size=Number(b.size),kind=txt(b.kind,20);
-      const uploadId=randomUUID(),key=validate(()=>reportGuideKey(workspaceId(),kind,uploadId));
-      if(!validPdfUpload(name,size))throw bad('10MB 이하 PDF만 올릴 수 있습니다.');
-      return json(200,{url:await getSignedUrl(s3,new PutObjectCommand({Bucket:bucket,Key:key,ContentType:'application/pdf'}),{expiresIn:300}),uploadId});
+      if(!validGuideUpload(name,size))throw bad('10MB 이하 PDF 또는 DOCX만 올릴 수 있습니다.');
+      const ext=guideExt(name)||'pdf';
+      const uploadId=randomUUID(),key=validate(()=>reportGuideKey(workspaceId(),kind,uploadId,ext));
+      return json(200,{url:await getSignedUrl(s3,new PutObjectCommand({Bucket:bucket,Key:key,ContentType:guideContentType(ext)}),{expiresIn:300}),uploadId});
     }
     if(method==='PUT'&&path==='/report-guides'){
-      must(me,['tutor']);const kind=txt(b.kind,20),name=txt(b.name,180),id=txt(b.uploadId,100),key=validate(()=>reportGuideKey(workspaceId(),kind,id));
-      const object=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:key})).catch(()=>{throw bad('업로드된 PDF를 찾지 못했습니다.');});
-      if(!object.ContentLength||!validPdfUpload(name,object.ContentLength)||object.ContentType!=='application/pdf')throw bad('PDF 파일을 확인해 주세요.');
+      must(me,['tutor']);const kind=txt(b.kind,20),name=txt(b.name,180),id=txt(b.uploadId,100);
+      const ext=guideExt(name);if(!ext)throw bad('PDF 또는 DOCX 파일을 확인해 주세요.');
+      const key=validate(()=>reportGuideKey(workspaceId(),kind,id,ext));
+      const object=await s3.send(new HeadObjectCommand({Bucket:bucket,Key:key})).catch(()=>{throw bad('업로드된 파일을 찾지 못했습니다.');});
+      if(!object.ContentLength||!validGuideUpload(name,object.ContentLength)||object.ContentType!==guideContentType(ext))throw bad('PDF 또는 DOCX 파일을 확인해 주세요.');
       const signature=await s3.send(new GetObjectCommand({Bucket:bucket,Key:key,Range:'bytes=0-4'}));
-      if(!isPdfHeader(await signature.Body?.transformToByteArray()))throw bad('PDF 파일 형식을 확인해 주세요.');
-      const guide:ReportGuide={id,kind:kind as ReportGuide['kind'],name,size:object.ContentLength,updatedAt:now()};
+      if(!validGuideHeader(ext,await signature.Body?.transformToByteArray()))throw bad('파일 형식을 확인해 주세요.');
+      const guide:ReportGuide={id,kind:kind as ReportGuide['kind'],name,size:object.ContentLength,ext,updatedAt:now()};
       const previous=data<ReportGuide>(await get(`REPORTGUIDE#${kind}`));
       await put(item(`REPORTGUIDE#${kind}`,guide));
-      if(previous)await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:reportGuideKey(workspaceId(),kind,previous.id)}));
+      if(previous)await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:reportGuideKey(workspaceId(),kind,previous.id,previous.ext||'pdf')}));
       return json(200,guide);
     }
     if((match=path.match(/^\/report-guides\/([^/]+)\/url$/))&&method==='GET'){
       const kind=match[1];
       const guide=data<ReportGuide>(await get(`REPORTGUIDE#${kind}`));if(!guide)throw bad('보고서 자료를 찾지 못했습니다.',404);
-      const key=validate(()=>reportGuideKey(workspaceId(),kind,guide.id));
-      const disposition=event.queryStringParameters?.download==='1'?'attachment':'inline';
-      return json(200,{url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:key,ResponseContentType:'application/pdf',ResponseContentDisposition:`${disposition}; filename*=UTF-8''${encodeURIComponent(guide.name)}`}),{expiresIn:300})});
+      const ext=guide.ext||'pdf';
+      const key=validate(()=>reportGuideKey(workspaceId(),kind,guide.id,ext));
+      const disposition=ext==='pdf'&&event.queryStringParameters?.download!=='1'?'inline':'attachment';
+      return json(200,{url:await getSignedUrl(s3,new GetObjectCommand({Bucket:bucket,Key:key,ResponseContentType:guideContentType(ext),ResponseContentDisposition:`${disposition}; filename*=UTF-8''${encodeURIComponent(guide.name)}`}),{expiresIn:300})});
     }
     if(method==='POST'&&path==='/notice-attachments/upload-url'){
       must(me,['tutor']);const name=txt(b.name,180),size=Number(b.size);
